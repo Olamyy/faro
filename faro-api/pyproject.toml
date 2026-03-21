@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "faro-api"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.5",
+    "psycopg[binary]>=3.1",   # PostgreSQL — pipeline metadata store
+    "clickhouse-driver>=0.2", # Capture index queries (pending I01 decision)
+]
+
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest>=8.0",
+    "httpx>=0.26",            # FastAPI test client
+    "pytest-asyncio>=0.23",
+]

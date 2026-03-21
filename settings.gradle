@@ -1,0 +1,4 @@
+rootProject.name = 'faro'
+
+include 'faro-core'
+include 'faro-flink'

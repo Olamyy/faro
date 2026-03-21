@@ -1,0 +1,26 @@
+plugins {
+    id 'java-library'
+}
+
+ext {
+    flinkVersion = '1.18.0'
+}
+
+dependencies {
+    api project(':faro-core')
+
+    compileOnly "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    compileOnly "org.apache.flink:flink-java:${flinkVersion}"
+
+    testImplementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    testImplementation "org.apache.flink:flink-test-utils:${flinkVersion}"
+    testImplementation "org.apache.flink:flink-runtime:${flinkVersion}:tests"
+
+    implementation 'org.apache.kafka:kafka-clients:3.9.0'
+
+    implementation 'io.opentelemetry:opentelemetry-api:1.47.0'
+    implementation 'io.opentelemetry:opentelemetry-sdk:1.47.0'
+    implementation 'io.opentelemetry:opentelemetry-exporter-otlp:1.47.0'
+
+    testImplementation 'io.github.embeddedkafka:embedded-kafka_2.13:3.9.0'
+}
