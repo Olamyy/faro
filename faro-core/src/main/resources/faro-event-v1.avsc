@@ -1,0 +1,319 @@
+{
+  "namespace": "dev.faro.schema",
+  "type": "record",
+  "name": "CaptureEvent",
+  "doc": "Faro capture event schema v1.0.0. FROZEN 2026-03-21. Wire format for faro.capture.events. See faro-event.md for full field semantics, nullability rules, and the field population matrix. Do not modify this file — changes require faro-event-v2.avsc.",
+  "fields": [
+
+    {
+      "name": "schema_version",
+      "type": "string",
+      "doc": "Semver schema version. Value: 1.0.0. Consumers check this before deserialising version-gated fields."
+    },
+
+    {
+      "name": "pipeline_id",
+      "type": "string",
+      "doc": "Stable pipeline identifier. Must not change across restarts. Validated at faro register time."
+    },
+
+    {
+      "name": "operator_id",
+      "type": "string",
+      "doc": "Flink operator UID set via operator.uid(). User-assigned, stable, human-readable. Must not change across restarts — lineage correlation depends on it. The adapter throws IllegalStateException at open() if no stable UID is detected."
+    },
+
+    {
+      "name": "operator_type",
+      "type": {
+        "type": "enum",
+        "name": "OperatorType",
+        "doc": "The type of streaming operator this event was captured at. For ProcessFunction-based wrappers the caller must supply this explicitly via Faro.process(OperatorType, ...) — the wrapper cannot infer it.",
+        "symbols": [
+          "SOURCE",
+          "FILTER",
+          "MAP",
+          "JOIN",
+          "WINDOW",
+          "AGG",
+          "BROADCAST",
+          "CEP",
+          "SINK"
+        ]
+      }
+    },
+
+    {
+      "name": "feature_name",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Feature computed at this operator. Non-null required for SINK operators. Null permitted for mid-DAG operators shared upstream of multiple features. Multi-feature sinks emit N events per flush (one per feature), all with the same operator_id and input_cardinality — consumers must not sum input_cardinality across events sharing operator_id and processing_time."
+    },
+
+    {
+      "name": "capture_mode",
+      "type": {
+        "type": "enum",
+        "name": "CaptureMode",
+        "doc": "AGGREGATE = population statistics only, always safe. ENTITY = entity-scoped, opt-in, subject to data classification.",
+        "symbols": ["AGGREGATE", "ENTITY"]
+      }
+    },
+
+    {
+      "name": "event_time",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Event time of the last input record in the capture interval. ISO 8601 UTC. For WINDOW: event time of the last record in the window. Null if pipeline does not use event time."
+    },
+
+    {
+      "name": "event_time_min",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Event time of the first input record in the capture interval. ISO 8601 UTC. Null for WINDOW operators (use window_start instead) and when event time is not used. With event_time, describes the event-time range for non-windowed operators."
+    },
+
+    {
+      "name": "processing_time",
+      "type": "string",
+      "doc": "Wall-clock time at capture emission. ISO 8601 UTC. Always populated."
+    },
+
+    {
+      "name": "watermark",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Current watermark at this operator at emission time. ISO 8601 UTC. Null when: no watermark assigned yet (Flink Long.MIN_VALUE); RichMapFunction/RichFlatMapFunction (no API access); plain WindowFunction (no API access); AsyncFunction (no API access). See faro-event.md watermark access notes."
+    },
+
+    {
+      "name": "window_start",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Start of the window (inclusive). ISO 8601 UTC. WINDOW operators only; null for all others."
+    },
+
+    {
+      "name": "window_end",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "End of the window (exclusive). ISO 8601 UTC. WINDOW operators only; null for all others."
+    },
+
+    {
+      "name": "late_event_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Records dropped due to watermark advancing past their event time. Null for non-WINDOW operators and CEP. For WINDOW: null when late_tracking_mode=UNKNOWN (late events dropped by Flink before operator sees them); zero or positive when late_tracking_mode=SIDE_OUTPUT. Null means not observable. Zero means observed and nothing was late."
+    },
+
+    {
+      "name": "late_tracking_mode",
+      "type": [
+        "null",
+        {
+          "type": "enum",
+          "name": "LateTrackingMode",
+          "doc": "SIDE_OUTPUT: user configured a late-data side output, late events are counted accurately. UNKNOWN: no side output configured, late events dropped silently by Flink before the operator sees them.",
+          "symbols": ["SIDE_OUTPUT", "UNKNOWN"]
+        }
+      ],
+      "default": null,
+      "doc": "WINDOW operators only; null for all others. Governs late_event_count nullability."
+    },
+
+    {
+      "name": "input_cardinality",
+      "type": "long",
+      "doc": "Records received since the last emission (interval-scoped, not cumulative). For WINDOW: records in the window. For AsyncFunction: records submitted to the async call. When capture_drop_since_last is true: a partial-interval lower bound."
+    },
+
+    {
+      "name": "output_cardinality",
+      "type": "long",
+      "doc": "Records emitted in the same interval. For SINK: records successfully written (input_cardinality - output_cardinality = write failures). For JOIN/BROADCAST OUTPUT event: > input_cardinality indicates fan-out. When capture_drop_since_last is true: a partial-interval lower bound."
+    },
+
+    {
+      "name": "emit_interval_ms",
+      "type": "long",
+      "doc": "Duration of the capture interval in milliseconds. Required to interpret cardinality fields. Adjusted for actual elapsed time on first emission after a restart or gap."
+    },
+
+    {
+      "name": "timer_fired_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Timer callbacks (event-time or processing-time) that fired in this interval. KeyedProcessFunction only; null for all other operator types. When input_cardinality=0 and output_cardinality>0, consumers must check this field before flagging as anomalous — timer-driven output with zero input is valid."
+    },
+
+    {
+      "name": "async_pending_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Async requests submitted but not yet responded to at emission time. AsyncFunction only; null for all other operator types. Primary diagnostic for backpressure and timeout issues."
+    },
+
+    {
+      "name": "pattern_match_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Complete CEP pattern matches in this interval. CEP operators only; null for all others. Zero over an extended period may indicate the pattern is too restrictive or input has stopped."
+    },
+
+    {
+      "name": "join_input_side",
+      "type": [
+        "null",
+        {
+          "type": "enum",
+          "name": "JoinInputSide",
+          "doc": "LEFT = left/regular input stream. RIGHT = right/broadcast input stream. OUTPUT = joined/processed output. Three events emitted per flush interval for JOIN and BROADCAST operators.",
+          "symbols": ["LEFT", "RIGHT", "OUTPUT"]
+        }
+      ],
+      "default": null,
+      "doc": "JOIN and BROADCAST operators only; null for all others. Value statistics and join_match_rate populated on OUTPUT events only."
+    },
+
+    {
+      "name": "join_lower_bound_ms",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Lower time bound of the join window in milliseconds. IntervalJoin only; null for CoProcessFunction-based joins and all non-JOIN operators."
+    },
+
+    {
+      "name": "join_upper_bound_ms",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Upper time bound of the join window in milliseconds. IntervalJoin only."
+    },
+
+    {
+      "name": "join_match_rate",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Fraction of left-side records that found at least one right-side match. JOIN OUTPUT event only; null on LEFT/RIGHT events and all non-JOIN operators."
+    },
+
+    {
+      "name": "value_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Number of feature values in this interval. AGGREGATE mode. Null for operators that do not produce a feature value (FILTER, JOIN/BROADCAST LEFT/RIGHT)."
+    },
+
+    {
+      "name": "value_min",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Minimum feature value. AGGREGATE mode. Null for non-numeric feature types (SCALAR_STRING, VECTOR_FLOAT, STRUCT)."
+    },
+
+    {
+      "name": "value_max",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Maximum feature value. AGGREGATE mode. Null for non-numeric feature types."
+    },
+
+    {
+      "name": "value_mean",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Mean feature value. AGGREGATE mode. Null for non-numeric feature types."
+    },
+
+    {
+      "name": "value_p50",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "50th percentile feature value. AGGREGATE mode. Null for non-numeric feature types."
+    },
+
+    {
+      "name": "value_p95",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "95th percentile feature value. AGGREGATE mode. Null for non-numeric feature types."
+    },
+
+    {
+      "name": "null_count",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Number of null feature values in this interval. AGGREGATE mode. Null for operators that do not produce a feature value."
+    },
+
+    {
+      "name": "entity_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Primary key for this feature (user ID, item ID, etc.). ENTITY mode only. Kafka message key in ENTITY mode, enabling log compaction and erasure. Null in AGGREGATE mode."
+    },
+
+    {
+      "name": "feature_value",
+      "type": ["null", "bytes"],
+      "default": null,
+      "doc": "Feature value encoded as UTF-8 JSON bytes. ENTITY mode only. Consumers must use feature_value_type to deserialise — do not infer type from bytes. Null in AGGREGATE mode."
+    },
+
+    {
+      "name": "feature_value_type",
+      "type": [
+        "null",
+        {
+          "type": "enum",
+          "name": "FeatureValueType",
+          "doc": "Type hint for deserialising feature_value bytes. Gated at FaroConfig construction time — scalars inferred from Java return type; VECTOR_FLOAT and STRUCT require explicit declaration.",
+          "symbols": ["SCALAR_DOUBLE", "SCALAR_LONG", "SCALAR_STRING", "VECTOR_FLOAT", "STRUCT"]
+        }
+      ],
+      "default": null,
+      "doc": "Declared or inferred type of feature_value. Null in AGGREGATE mode."
+    },
+
+    {
+      "name": "upstream_source",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "URI of the upstream source at the lineage boundary. Example: kafka://topic/purchases. SOURCE operators and the first instrumented operator downstream of an external source. Null for mid-DAG operators."
+    },
+
+    {
+      "name": "upstream_system",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "System type of the upstream source. Example: kafka, kinesis, pubsub. Null for mid-DAG operators."
+    },
+
+    {
+      "name": "trace_id",
+      "type": "string",
+      "doc": "OTEL-compatible 128-bit trace ID, hex-encoded (32 chars). Scoped to a pipeline execution."
+    },
+
+    {
+      "name": "span_id",
+      "type": "string",
+      "doc": "OTEL-compatible 64-bit span ID, hex-encoded (16 chars). Unique per capture event."
+    },
+
+    {
+      "name": "parent_span_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Span ID of the upstream operator's capture event. NOT set by the adapter. Resolved by the indexing job from the registered static DAG. Null in raw events on faro.capture.events; populated in the capture index after hydration."
+    },
+
+    {
+      "name": "capture_drop_since_last",
+      "type": "boolean",
+      "doc": "True if the capture buffer dropped events since the previous emission for this operator. When true: input_cardinality and output_cardinality are partial-interval lower bounds. Consumers must flag affected windows as incomplete and must not score them as zero-cardinality anomalies."
+    }
+
+  ]
+}
