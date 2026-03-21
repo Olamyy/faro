@@ -104,11 +104,6 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         return uid;
     }
 
-    /**
-     * Returns the {@link StreamingRuntimeContext} for this operator. Subclasses must provide
-     * their runtime context here; implemented via the concrete Flink base class's
-     * {@code getRuntimeContext()}.
-     */
     abstract org.apache.flink.api.common.functions.RuntimeContext getRuntimeContext();
 
     /**
@@ -136,13 +131,6 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         void run() throws Exception;
     }
 
-    /**
-     * Records a single observed element. Called from {@link #processElement} after
-     * {@link #inputCounter} has been incremented.
-     *
-     * @param contextTimestamp  the element's event-time timestamp ({@code ctx.timestamp()})
-     * @param contextWatermark  the current watermark
-     */
     void recordObserved(long contextTimestamp, long contextWatermark) {
         lastWatermarkMs = contextWatermark;
 
@@ -156,18 +144,10 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         }
     }
 
-    /**
-     * Returns the timer-fired count snapshot for this interval, or {@code null} if this
-     * operator does not track timers. Overridden by {@link FaroKeyedProcessFunction}.
-     */
     protected Long timerFiredCountSnapshot() {
         return null;
     }
 
-    /**
-     * Emits one {@link CaptureEvent} per configured feature and resets interval counters.
-     * Package-private to allow test access.
-     */
     void flush() {
         long now = System.currentTimeMillis();
         long input = inputCounter.getAndSet(0);

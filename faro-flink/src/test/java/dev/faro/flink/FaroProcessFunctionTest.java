@@ -210,10 +210,10 @@ class FaroProcessFunctionTest {
         assertNull(captured.events.get(0).getTimerFiredCount());
     }
 
-    // ---- helpers ----
-
-    private static ProcessFunction.Context mockCtx(Long timestamp, long watermark) {
-        ProcessFunction.Context ctx = mock(ProcessFunction.Context.class);
+    private static ProcessFunction<String, String>.Context mockCtx(Long timestamp, long watermark) {
+        @SuppressWarnings("unchecked")
+        ProcessFunction<String, String>.Context ctx =
+                (ProcessFunction<String, String>.Context) mock(ProcessFunction.Context.class);
         when(ctx.timestamp()).thenReturn(timestamp != null ? timestamp : Long.MIN_VALUE);
         TimerService timerService = mock(TimerService.class);
         when(timerService.currentWatermark()).thenReturn(watermark);

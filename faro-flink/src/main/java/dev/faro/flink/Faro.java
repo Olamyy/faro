@@ -20,17 +20,6 @@ public final class Faro {
 
     private Faro() {}
 
-    /**
-     * Wrap a {@link ProcessFunction} with Faro capture instrumentation.
-     *
-     * @param type     operator type — must be {@code FILTER}, {@code MAP}, or {@code AGG}
-     * @param config   pipeline identity and feature configuration
-     * @param delegate the process function to wrap
-     * @param sink     destination for emitted capture events
-     * @param <IN>     input type
-     * @param <OUT>    output type
-     * @return instrumented wrapper ready to pass to {@code DataStream.process()}
-     */
     public static <IN, OUT> FaroProcessFunction<IN, OUT> process(
             CaptureEvent.OperatorType type,
             FaroConfig config,
@@ -39,18 +28,6 @@ public final class Faro {
         return new FaroProcessFunction<>(type, config, delegate, sink);
     }
 
-    /**
-     * Wrap a {@link KeyedProcessFunction} with Faro capture instrumentation.
-     *
-     * @param type     operator type — must be {@code FILTER}, {@code MAP}, or {@code AGG}
-     * @param config   pipeline identity and feature configuration
-     * @param delegate the keyed process function to wrap
-     * @param sink     destination for emitted capture events
-     * @param <KEY>    key type
-     * @param <IN>     input type
-     * @param <OUT>    output type
-     * @return instrumented wrapper ready to pass to {@code KeyedStream.process()}
-     */
     public static <KEY, IN, OUT> FaroKeyedProcessFunction<KEY, IN, OUT> keyedProcess(
             CaptureEvent.OperatorType type,
             FaroConfig config,

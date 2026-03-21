@@ -2,6 +2,10 @@ plugins {
     id 'java-library'
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << '-Xlint:unchecked'
+}
+
 ext {
     flinkVersion = '1.18.0'
 }

@@ -64,11 +64,6 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
     private transient long intervalStartMs;
     private transient volatile long lastWatermark;
 
-    /**
-     * @param delegate         the sink to wrap; invoked first on every record
-     * @param config           pipeline identity and feature configuration
-     * @param captureEventSink destination for emitted capture events; must be non-blocking
-     */
     public FaroSink(SinkFunction<IN> delegate, FaroConfig config, CaptureEventSink captureEventSink) {
         this.delegate = delegate;
         this.config = config;
