@@ -7,27 +7,20 @@ ext {
 }
 
 dependencies {
-    // faro-core: CaptureEvent model, enums, shared types
     api project(':faro-core')
 
-    // Flink — provided at runtime by the cluster; compileOnly keeps it out of
-    // the fat jar users bundle into their pipeline.
     compileOnly "org.apache.flink:flink-streaming-java:${flinkVersion}"
     compileOnly "org.apache.flink:flink-java:${flinkVersion}"
 
-    // Needed at test time for MiniCluster integration tests
     testImplementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
     testImplementation "org.apache.flink:flink-test-utils:${flinkVersion}"
     testImplementation "org.apache.flink:flink-runtime:${flinkVersion}:tests"
 
-    // Kafka producer for capture event emission
     implementation 'org.apache.kafka:kafka-clients:3.6.1'
 
-    // OpenTelemetry SDK for span emission
     implementation 'io.opentelemetry:opentelemetry-api:1.32.0'
     implementation 'io.opentelemetry:opentelemetry-sdk:1.32.0'
     implementation 'io.opentelemetry:opentelemetry-exporter-otlp:1.32.0'
 
-    // Embedded Kafka for integration tests
     testImplementation 'io.github.embeddedkafka:embedded-kafka_2.13:3.6.0'
 }

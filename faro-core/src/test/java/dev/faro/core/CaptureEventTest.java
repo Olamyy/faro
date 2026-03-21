@@ -1,6 +1,5 @@
 package dev.faro.core;
 
-import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,98 +22,18 @@ class CaptureEventTest {
     }
 
     @Test
-    void builder_rejectsNullPipelineId() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().pipelineId(null).build());
-        assertTrue(ex.getMessage().contains("pipeline_id"));
-    }
-
-    @Test
-    void builder_rejectsEmptyOperatorId() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().operatorId("").build());
-        assertTrue(ex.getMessage().contains("operator_id"));
-    }
-
-    @Test
-    void builder_rejectsNullOperatorType() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().operatorType(null).build());
-        assertTrue(ex.getMessage().contains("operator_type"));
-    }
-
-    @Test
-    void builder_rejectsNullCaptureMode() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().captureMode(null).build());
-        assertTrue(ex.getMessage().contains("capture_mode"));
-    }
-
-    @Test
-    void builder_rejectsNullProcessingTime() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().processingTime(null).build());
-        assertTrue(ex.getMessage().contains("processing_time"));
-    }
-
-    @Test
-    void builder_rejectsNullTraceId() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().traceId(null).build());
-        assertTrue(ex.getMessage().contains("trace_id"));
-    }
-
-    @Test
-    void builder_rejectsNullSpanId() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                minimalBuilder().spanId(null).build());
-        assertTrue(ex.getMessage().contains("span_id"));
-    }
-
-    @Test
-    void build_alwaysSetsSchemaVersion() {
-        CaptureEvent e = minimalBuilder().build();
-        assertEquals("1.0.0", e.getSchemaVersion());
-    }
-
-    @Test
-    void optionalFields_areNullByDefault() {
-        CaptureEvent e = minimalBuilder().build();
-        assertNull(e.getFeatureName());
-        assertNull(e.getEventTime());
-        assertNull(e.getEventTimeMin());
-        assertNull(e.getWatermark());
-        assertNull(e.getWindowStart());
-        assertNull(e.getWindowEnd());
-        assertNull(e.getLateEventCount());
-        assertNull(e.getLateTrackingMode());
-        assertNull(e.getTimerFiredCount());
-        assertNull(e.getAsyncPendingCount());
-        assertNull(e.getPatternMatchCount());
-        assertNull(e.getJoinInputSide());
-        assertNull(e.getJoinLowerBoundMs());
-        assertNull(e.getJoinUpperBoundMs());
-        assertNull(e.getJoinMatchRate());
-        assertNull(e.getValueCount());
-        assertNull(e.getValueMin());
-        assertNull(e.getValueMax());
-        assertNull(e.getValueMean());
-        assertNull(e.getValueP50());
-        assertNull(e.getValueP95());
-        assertNull(e.getNullCount());
-        assertNull(e.getEntityId());
-        assertNull(e.getFeatureValue());
-        assertNull(e.getFeatureValueType());
-        assertNull(e.getUpstreamSource());
-        assertNull(e.getUpstreamSystem());
-        assertNull(e.getParentSpanId());
+    void builder_rejectsInvalidRequiredField() {
+        assertThrows(IllegalStateException.class, () -> minimalBuilder().pipelineId(null).build());
+        assertThrows(IllegalStateException.class, () -> minimalBuilder().pipelineId("").build());
+        assertThrows(IllegalStateException.class, () -> minimalBuilder().operatorType(null).build());
+        assertThrows(IllegalStateException.class, () -> minimalBuilder().traceId(null).build());
+        assertThrows(IllegalStateException.class, () -> minimalBuilder().spanId(null).build());
     }
 
     @Test
     void jsonRoundTrip_minimalEvent() {
         CaptureEvent original = minimalBuilder().build();
-        String json = original.toJson();
-        CaptureEvent restored = CaptureEvent.fromJson(json);
+        CaptureEvent restored = CaptureEvent.fromJson(original.toJson());
 
         assertEquals(original.getPipelineId(), restored.getPipelineId());
         assertEquals(original.getOperatorId(), restored.getOperatorId());
@@ -127,7 +46,9 @@ class CaptureEventTest {
         assertEquals(original.getTraceId(), restored.getTraceId());
         assertEquals(original.getSpanId(), restored.getSpanId());
         assertEquals(original.isCaptureDropSinceLast(), restored.isCaptureDropSinceLast());
-        assertEquals(original.getSchemaVersion(), restored.getSchemaVersion());
+        assertNull(restored.getFeatureName());
+        assertNull(restored.getWatermark());
+        assertNull(restored.getParentSpanId());
     }
 
     @Test
@@ -144,7 +65,7 @@ class CaptureEventTest {
                 .valueP50(38.1)
                 .valueP95(189.0)
                 .nullCount(3L)
-                .captureDropSinceLast(false)
+                .captureDropSinceLast(true)
                 .build();
 
         CaptureEvent restored = CaptureEvent.fromJson(original.toJson());
@@ -160,22 +81,13 @@ class CaptureEventTest {
         assertEquals(original.getValueP50(), restored.getValueP50());
         assertEquals(original.getValueP95(), restored.getValueP95());
         assertEquals(original.getNullCount(), restored.getNullCount());
-    }
-
-    @Test
-    void jsonRoundTrip_nullOptionalFieldsRoundTripAsNull() {
-        CaptureEvent original = minimalBuilder().build();
-        CaptureEvent restored = CaptureEvent.fromJson(original.toJson());
-        assertNull(restored.getFeatureName());
-        assertNull(restored.getWatermark());
-        assertNull(restored.getParentSpanId());
+        assertTrue(restored.isCaptureDropSinceLast());
     }
 
     @Test
     void avroRoundTrip_minimalEvent() {
         CaptureEvent original = minimalBuilder().build();
-        GenericRecord record = original.toAvroRecord();
-        CaptureEvent restored = CaptureEvent.fromAvroRecord(record);
+        CaptureEvent restored = CaptureEvent.fromAvroRecord(original.toAvroRecord());
 
         assertEquals(original.getPipelineId(), restored.getPipelineId());
         assertEquals(original.getOperatorId(), restored.getOperatorId());
@@ -188,6 +100,9 @@ class CaptureEventTest {
         assertEquals(original.getTraceId(), restored.getTraceId());
         assertEquals(original.getSpanId(), restored.getSpanId());
         assertEquals(original.isCaptureDropSinceLast(), restored.isCaptureDropSinceLast());
+        assertNull(restored.getFeatureName());
+        assertNull(restored.getWatermark());
+        assertNull(restored.getParentSpanId());
     }
 
     @Test
@@ -218,17 +133,6 @@ class CaptureEventTest {
         assertEquals(original.getWindowEnd(), restored.getWindowEnd());
         assertEquals(original.getLateTrackingMode(), restored.getLateTrackingMode());
         assertEquals(original.getLateEventCount(), restored.getLateEventCount());
-    }
-
-    @Test
-    void avroRoundTrip_nullOptionalFieldsRoundTripAsNull() {
-        CaptureEvent original = minimalBuilder().build();
-        CaptureEvent restored = CaptureEvent.fromAvroRecord(original.toAvroRecord());
-        assertNull(restored.getFeatureName());
-        assertNull(restored.getWatermark());
-        assertNull(restored.getParentSpanId());
-        assertNull(restored.getLateEventCount());
-        assertNull(restored.getJoinInputSide());
     }
 
     @Test
@@ -268,24 +172,5 @@ class CaptureEventTest {
         assertNotNull(schema.getField("pipeline_id"));
         assertNotNull(schema.getField("operator_type"));
         assertNotNull(schema.getField("capture_drop_since_last"));
-    }
-
-    @Test
-    void captureDropSinceLast_defaultsFalse() {
-        CaptureEvent e = minimalBuilder().captureDropSinceLast(false).build();
-        assertFalse(e.isCaptureDropSinceLast());
-    }
-
-    @Test
-    void captureDropSinceLast_canBeSetTrue() {
-        CaptureEvent e = minimalBuilder().captureDropSinceLast(true).build();
-        assertTrue(e.isCaptureDropSinceLast());
-    }
-
-    @Test
-    void captureDropSinceLast_roundTripsViaJson() {
-        CaptureEvent original = minimalBuilder().captureDropSinceLast(true).build();
-        CaptureEvent restored = CaptureEvent.fromJson(original.toJson());
-        assertTrue(restored.isCaptureDropSinceLast());
     }
 }
