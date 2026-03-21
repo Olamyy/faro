@@ -29,6 +29,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * stable UID is present, {@link #open} throws {@link IllegalStateException} — the job will
  * not start.
  *
+ * <p><b>Watermark semantics:</b> the watermark field in emitted events reflects the most
+ * recent watermark seen across all {@link #invoke} calls in the flush interval.
+ * {@link Long#MIN_VALUE} (Flink's sentinel for "no watermark assigned") is emitted as
+ * {@code null}. This is a known limitation of sink-only instrumentation: the captured
+ * watermark is the most advanced watermark in the job at the time of the last record in
+ * the interval, not a per-feature watermark.
+ *
  * <p><b>Output cardinality semantics:</b> {@code output_cardinality} reflects the number of
  * {@link SinkFunction#invoke} calls that returned without throwing, not confirmed writes to the
  * external system. Sinks that swallow individual record errors will report full output
@@ -55,7 +62,7 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
     private transient AtomicLong inputCounter;
     private transient AtomicLong outputCounter;
     private transient long intervalStartMs;
-    private transient ProcessingTimeService processingTimeService;
+    private transient volatile long lastWatermark;
 
     /**
      * @param delegate         the sink to wrap; invoked first on every record
@@ -85,6 +92,7 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
         this.inputCounter = new AtomicLong(0);
         this.outputCounter = new AtomicLong(0);
         this.intervalStartMs = System.currentTimeMillis();
+        this.lastWatermark = Long.MIN_VALUE;
 
         if (delegate instanceof RichSinkFunction) {
             ((RichSinkFunction<IN>) delegate).setRuntimeContext(getRuntimeContext());
@@ -92,25 +100,12 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
         }
     }
 
-    /**
-     * Called by Flink to inject the {@link ProcessingTimeService} before the operator starts.
-     * Used to register the recurring flush timer.
-     */
-    public void setProcessingTimeService(ProcessingTimeService service) {
-        this.processingTimeService = service;
-        long firstTrigger = service.getCurrentProcessingTime() + config.getFlushIntervalMs();
-        service.registerTimer(firstTrigger, timestamp -> onTimer());
-    }
-
-    private void onTimer() {
-        flush();
-        long next = processingTimeService.getCurrentProcessingTime() + config.getFlushIntervalMs();
-        processingTimeService.registerTimer(next, timestamp -> onTimer());
-    }
-
     @Override
     public void invoke(IN value, Context context) throws Exception {
         inputCounter.incrementAndGet();
+        if (context != null) {
+            lastWatermark = context.currentWatermark();
+        }
         delegate.invoke(value, context);
         outputCounter.incrementAndGet();
     }
@@ -133,6 +128,9 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
 
         String processingTime = Instant.ofEpochMilli(now).toString();
         String spanId = newSpanId();
+        String watermark = lastWatermark == Long.MIN_VALUE
+                ? null
+                : Instant.ofEpochMilli(lastWatermark).toString();
         List<String> features = config.getFeatureNames();
 
         for (String featureName : features) {
@@ -148,6 +146,7 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
                     .emitIntervalMs(intervalMs)
                     .traceId(traceId)
                     .spanId(spanId)
+                    .watermark(watermark)
                     .captureDropSinceLast(false)
                     .build();
 
