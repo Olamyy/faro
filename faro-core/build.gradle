@@ -3,10 +3,7 @@ plugins {
 }
 
 dependencies {
-    // Avro — schema serialisation
     api 'org.apache.avro:avro:1.12.1'
-
-    // Jackson — JSON serialisation for feature_value bytes
-    api 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    api 'com.fasterxml.jackson.core:jackson-databind:2.21.2'
 
 }
