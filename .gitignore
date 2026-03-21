@@ -205,7 +205,6 @@ SHA256SUMS.txt
 
 # Gradle
 .gradle/
-build/
 out/
 *.iml
 .idea/*
