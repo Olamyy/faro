@@ -33,7 +33,6 @@ class FaroSinkTest {
         FaroConfig config = FaroConfig.builder()
                 .pipelineId(PIPELINE_ID)
                 .features(features)
-                .flushIntervalMs(30_000)
                 .build();
         FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), config, captured);
         sink.setRuntimeContext(runtimeContext);
