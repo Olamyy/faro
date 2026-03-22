@@ -16,15 +16,9 @@ import dev.faro.core.CaptureEvent;
 public interface CaptureEventSink {
 
     /**
-     * Emit a capture event. Must return immediately. Must not throw.
-     *
-     * @param event the event to emit
+     * Emit a capture event. Must return immediately and must not throw.
      */
     void emit(CaptureEvent event);
 
-    /**
-     * Flush buffered events and release resources. Called once on operator shutdown.
-     * May block.
-     */
     void close();
 }

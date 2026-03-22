@@ -45,10 +45,6 @@ public final class FaroConfig {
             return this;
         }
 
-        /**
-         * Feature names computed at this sink. For a multi-feature sink, list all features
-         * in the order they will be reported. At least one name is required.
-         */
         public Builder features(List<String> v) {
             this.featureNames = v;
             return this;
@@ -58,9 +54,6 @@ public final class FaroConfig {
             return features(List.of(v));
         }
 
-        /**
-         * @throws IllegalStateException if {@code pipelineId} is null/empty or no features are specified.
-         */
         public FaroConfig build() {
             if (pipelineId == null || pipelineId.isEmpty()) {
                 throw new IllegalStateException("FaroConfig: pipelineId must not be null or empty");
