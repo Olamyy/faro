@@ -3,6 +3,9 @@ package dev.faro.flink;
 import dev.faro.core.CaptureEvent;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.windows.Window;
+import org.apache.flink.util.OutputTag;
 
 /**
  * Static factory for Faro instrumentation wrappers.
@@ -34,5 +37,13 @@ public final class Faro {
             KeyedProcessFunction<KEY, IN, OUT> delegate,
             CaptureEventSink sink) {
         return new FaroKeyedProcessFunction<>(type, config, delegate, sink);
+    }
+
+    public static <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowProcess(
+            FaroConfig config,
+            ProcessWindowFunction<IN, OUT, KEY, W> delegate,
+            CaptureEventSink sink,
+            OutputTag<IN> lateDataTag) {
+        return new FaroProcessWindowFunction<>(config, delegate, sink, lateDataTag);
     }
 }
