@@ -8,8 +8,6 @@ import org.apache.flink.util.Collector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -105,18 +103,6 @@ class FaroKeyedProcessFunctionTest {
     @SuppressWarnings("unchecked")
     private static Collector<String> noopCollector() {
         return mock(Collector.class);
-    }
-
-    private static final class CapturingCaptureEventSink implements CaptureEventSink {
-        final List<CaptureEvent> events = new ArrayList<>();
-
-        @Override
-        public void emit(CaptureEvent event) {
-            events.add(event);
-        }
-
-        @Override
-        public void close() {}
     }
 
     private static final class PassThroughKeyedFn extends KeyedProcessFunction<String, String, String> {

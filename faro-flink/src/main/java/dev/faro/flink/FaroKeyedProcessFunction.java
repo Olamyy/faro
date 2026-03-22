@@ -1,7 +1,6 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
-import org.apache.flink.api.common.functions.RichFunction;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -48,7 +47,7 @@ public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFu
 
             @Override
             protected Long timerFiredCountSnapshot() {
-                return timerCounter == null ? 0L : timerCounter.getAndSet(0);
+                return timerCounter.getAndSet(0);
             }
         };
     }
@@ -57,7 +56,7 @@ public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFu
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
         timerCounter = new AtomicLong(0);
-        base.open(parameters, (RichFunction) delegate);
+        base.open(parameters, delegate);
     }
 
     @Override
@@ -73,7 +72,7 @@ public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFu
 
     @Override
     public void close() throws Exception {
-        base.close((RichFunction) delegate);
+        base.close(delegate);
     }
 
     void flush() {

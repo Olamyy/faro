@@ -52,6 +52,11 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
     transient AtomicLong eventTimeMaxMs;
     transient AtomicLong eventTimeMinMs;
     transient long intervalStartMs;
+    /**
+     * Most recent watermark seen in any {@code processElement} call. Not reset between flush
+     * intervals — if no records arrive in an interval the previous watermark is reported.
+     * {@link Long#MIN_VALUE} is emitted as {@code null}.
+     */
     transient volatile long lastWatermarkMs;
 
     FaroProcessFunctionBase(
@@ -73,8 +78,7 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
      *
      * @throws IllegalStateException if the operator has no stable UID
      */
-    void open(Configuration parameters, RichFunction richDelegate) throws Exception {
-
+    void open(Configuration parameters, Object delegate) throws Exception {
         this.operatorId = getOperatorID();
         this.traceId = newTraceId();
         this.inputCounter = new AtomicLong(0);
@@ -84,9 +88,9 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         this.intervalStartMs = System.currentTimeMillis();
         this.lastWatermarkMs = Long.MIN_VALUE;
 
-        if (richDelegate != null) {
-            richDelegate.setRuntimeContext(getRuntimeContext());
-            richDelegate.open(parameters);
+        if (delegate instanceof RichFunction) {
+            ((RichFunction) delegate).setRuntimeContext(getRuntimeContext());
+            ((RichFunction) delegate).open(parameters);
         }
     }
 
@@ -191,11 +195,11 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         }
     }
 
-    void close(RichFunction richDelegate) throws Exception {
+    void close(Object delegate) throws Exception {
         flush();
         captureEventSink.close();
-        if (richDelegate != null) {
-            richDelegate.close();
+        if (delegate instanceof RichFunction) {
+            ((RichFunction) delegate).close();
         }
     }
 

@@ -1,6 +1,5 @@
 package dev.faro.flink;
 
-import dev.faro.core.CaptureEvent;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
@@ -8,8 +7,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -150,18 +147,6 @@ class FaroSinkTest {
         sink.flush();
 
         assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
-    }
-
-    private static final class CapturingCaptureEventSink implements CaptureEventSink {
-        final List<CaptureEvent> events = new ArrayList<>();
-
-        @Override
-        public void emit(CaptureEvent event) {
-            events.add(event);
-        }
-
-        @Override
-        public void close() {}
     }
 
     private static final class NoopSink<T> implements SinkFunction<T> {

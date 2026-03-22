@@ -10,8 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -210,6 +208,24 @@ class FaroProcessFunctionTest {
         assertNull(captured.events.get(0).getTimerFiredCount());
     }
 
+    @Test
+    void processElement_delegatesElement() throws Exception {
+        CountingFn delegate = new CountingFn();
+        FaroConfig config = FaroConfig.builder()
+                .pipelineId(PIPELINE_ID)
+                .features("feature-a")
+                .build();
+        FaroProcessFunction<String, String> fn = new FaroProcessFunction<>(
+                CaptureEvent.OperatorType.MAP, config, delegate, captured);
+        fn.setRuntimeContext(runtimeContext);
+        fn.open(new Configuration());
+
+        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
+        fn.processElement("r2", mockCtx(null, Long.MIN_VALUE), noopCollector());
+
+        assertEquals(2, delegate.processElementCallCount);
+    }
+
     private static ProcessFunction<String, String>.Context mockCtx(Long timestamp, long watermark) {
         @SuppressWarnings("unchecked")
         ProcessFunction<String, String>.Context ctx =
@@ -226,22 +242,19 @@ class FaroProcessFunctionTest {
         return mock(Collector.class);
     }
 
-    private static final class CapturingCaptureEventSink implements CaptureEventSink {
-        final List<CaptureEvent> events = new ArrayList<>();
-
-        @Override
-        public void emit(CaptureEvent event) {
-            events.add(event);
-        }
-
-        @Override
-        public void close() {}
-    }
-
     private static final class PassThroughFn extends ProcessFunction<String, String> {
         @Override
         public void processElement(String value, Context ctx, Collector<String> out) {
             out.collect(value);
+        }
+    }
+
+    private static final class CountingFn extends ProcessFunction<String, String> {
+        int processElementCallCount = 0;
+
+        @Override
+        public void processElement(String value, Context ctx, Collector<String> out) {
+            processElementCallCount++;
         }
     }
 
