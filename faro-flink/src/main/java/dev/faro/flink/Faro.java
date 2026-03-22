@@ -7,43 +7,61 @@ import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.util.OutputTag;
 
+import java.util.Objects;
+
 /**
- * Static factory for Faro instrumentation wrappers.
+ * Entry point for Faro instrumentation.
  *
- * <p>Usage:
+ * <p>Create one instance per pipeline, then call the {@code trace()} methods inline:
  * <pre>{@code
- * stream.process(Faro.process(CaptureEvent.OperatorType.MAP, config, myFn, sink))
+ * Faro faro = new Faro(config, sink);
+ *
+ * stream.process(faro.trace(OperatorType.MAP, myFn))
  *       .uid("my-op");
  *
- * keyedStream.process(Faro.keyedProcess(CaptureEvent.OperatorType.AGG, config, myKeyedFn, sink))
+ * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn))
  *            .uid("my-keyed-op");
+ *
+ * windowedStream.process(faro.windowTrace(myWindowFn))
+ *               .uid("my-window-op");
+ *
+ * windowedStream.process(faro.windowTrace(myWindowFn, lateDataTag))
+ *               .uid("my-window-op");
  * }</pre>
  */
 public final class Faro {
 
-    private Faro() {}
+    private final FaroConfig config;
+    private final CaptureEventSinkFactory sinkFactory;
 
-    public static <IN, OUT> FaroProcessFunction<IN, OUT> process(
-            CaptureEvent.OperatorType type,
-            FaroConfig config,
-            ProcessFunction<IN, OUT> delegate,
-            CaptureEventSink sink) {
-        return new FaroProcessFunction<>(type, config, delegate, sink);
+    public Faro(FaroConfig config, CaptureEventSinkFactory sinkFactory) {
+        Objects.requireNonNull(config, "config must not be null");
+        Objects.requireNonNull(sinkFactory, "sinkFactory must not be null");
+        this.config = config;
+        this.sinkFactory = sinkFactory;
     }
 
-    public static <KEY, IN, OUT> FaroKeyedProcessFunction<KEY, IN, OUT> keyedProcess(
+    public <IN, OUT> FaroProcessFunction<IN, OUT> trace(
             CaptureEvent.OperatorType type,
-            FaroConfig config,
-            KeyedProcessFunction<KEY, IN, OUT> delegate,
-            CaptureEventSink sink) {
-        return new FaroKeyedProcessFunction<>(type, config, delegate, sink);
+            ProcessFunction<IN, OUT> delegate) {
+        return new FaroProcessFunction<>(type, config, delegate, sinkFactory);
     }
 
-    public static <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowProcess(
-            FaroConfig config,
+    public <KEY, IN, OUT> FaroKeyedProcessFunction<KEY, IN, OUT> keyedTrace(
+            CaptureEvent.OperatorType type,
+            KeyedProcessFunction<KEY, IN, OUT> delegate) {
+        return new FaroKeyedProcessFunction<>(type, config, delegate, sinkFactory);
+    }
+
+    public <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowTrace(
+            ProcessWindowFunction<IN, OUT, KEY, W> delegate) {
+        return new FaroProcessWindowFunction<>(config, delegate, sinkFactory, null);
+    }
+
+    public <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowTrace(
             ProcessWindowFunction<IN, OUT, KEY, W> delegate,
-            CaptureEventSink sink,
             OutputTag<IN> lateDataTag) {
-        return new FaroProcessWindowFunction<>(config, delegate, sink, lateDataTag);
+        return new FaroProcessWindowFunction<>(config, delegate, sinkFactory, lateDataTag);
     }
+
 }

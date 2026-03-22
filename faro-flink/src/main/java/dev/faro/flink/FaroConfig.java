@@ -1,5 +1,6 @@
 package dev.faro.flink;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -11,7 +12,7 @@ import java.util.List;
  *
  * <p>Construct via {@link Builder}. {@code pipelineId} and at least one feature are required.
  */
-public final class FaroConfig {
+public final class FaroConfig implements Serializable {
 
     private final String pipelineId;
     private final List<String> featureNames;

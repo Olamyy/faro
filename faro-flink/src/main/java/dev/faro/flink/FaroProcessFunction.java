@@ -1,7 +1,6 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
-import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
@@ -28,20 +27,15 @@ public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT>
             CaptureEvent.OperatorType operatorType,
             FaroConfig config,
             ProcessFunction<IN, OUT> delegate,
-            CaptureEventSink captureEventSink) {
+            CaptureEventSinkFactory captureEventSinkFactory) {
         this.delegate = delegate;
-        this.base = new FaroProcessFunctionBase<>(operatorType, config, captureEventSink) {
-            @Override
-            RuntimeContext getRuntimeContext() {
-                return FaroProcessFunction.this.getRuntimeContext();
-            }
-        };
+        this.base = new FaroProcessFunctionBase<>(operatorType, config, captureEventSinkFactory, this);
     }
 
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        base.open(parameters, delegate);
+        base.open(parameters, this, delegate);
     }
 
     @Override

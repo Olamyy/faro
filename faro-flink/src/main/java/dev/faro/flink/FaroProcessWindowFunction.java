@@ -39,20 +39,21 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
 
     private final FaroConfig config;
     private final ProcessWindowFunction<IN, OUT, KEY, W> delegate;
-    private final CaptureEventSink captureEventSink;
+    private final CaptureEventSinkFactory captureEventSinkFactory;
     private final OutputTag<IN> lateDataTag;
 
+    private transient CaptureEventSink captureEventSink;
     private transient String operatorId;
     private transient String traceId;
 
     FaroProcessWindowFunction(
             FaroConfig config,
             ProcessWindowFunction<IN, OUT, KEY, W> delegate,
-            CaptureEventSink captureEventSink,
+            CaptureEventSinkFactory captureEventSinkFactory,
             OutputTag<IN> lateDataTag) {
         this.config = config;
         this.delegate = delegate;
-        this.captureEventSink = captureEventSink;
+        this.captureEventSinkFactory = captureEventSinkFactory;
         this.lateDataTag = lateDataTag;
     }
 
@@ -68,6 +69,7 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
                     + "Call .uid(\"your-stable-id\") on the operator in your pipeline definition. "
                     + "Without a stable UID, lineage correlation will break across restarts.");
         }
+        this.captureEventSink = captureEventSinkFactory.create();
         this.operatorId = uid;
         this.traceId = newTraceId();
 
@@ -147,15 +149,14 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
 
     @Override
     public void close() throws Exception {
-        captureEventSink.close();
+        if (captureEventSink != null) {
+            captureEventSink.close();
+        }
         if (delegate != null) {
             delegate.close();
         }
     }
 
-    /**
-     * Counts successful {@link #collect} calls, then delegates to the wrapped collector.
-     */
     static final class CountingCollector<T> implements Collector<T> {
         private final Collector<T> inner;
         long count = 0;

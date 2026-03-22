@@ -393,8 +393,13 @@ class FaroProcessWindowFunctionTest {
         }
     }
 
-    private static final class TrackingCaptureEventSink implements CaptureEventSink {
+    private static final class TrackingCaptureEventSink implements CaptureEventSink, CaptureEventSinkFactory {
         boolean closed = false;
+
+        @Override
+        public CaptureEventSink create() {
+            return this;
+        }
 
         @Override
         public void emit(CaptureEvent event) {}
