@@ -1,5 +1,7 @@
 package dev.faro.e2e;
 
+import dev.faro.flink.AsyncCaptureEventSink;
+import dev.faro.flink.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
 import dev.faro.flink.FaroConfig;
 import dev.faro.flink.FaroSink;
@@ -40,8 +42,9 @@ public final class SensorPipelineJob {
                 .features("temperature")
                 .build();
 
-        StdoutCaptureEventSink sink = new StdoutCaptureEventSink();
-        Faro faro = new Faro(config, sink);
+        CaptureEventSinkFactory sinkFactory =
+                () -> new AsyncCaptureEventSink(new StdoutCaptureEventSink(), 1_000);
+        Faro faro = new Faro(config, sinkFactory);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -71,7 +74,7 @@ public final class SensorPipelineJob {
                 .process(faro.windowTrace(new TemperatureSumFn()))
                 .returns(TypeInformation.of(SensorReading.class))
                 .uid("window.temperature-sum")
-                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), config, sink, "sink.file"))
+                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), config, sinkFactory, "sink.file"))
                 .uid("sink.file");
 
         env.execute("sensor-pipeline-e2e");

@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Flink operators are single-threaded per subtask, so the {@code poll() + offer()} overflow
  * sequence is not atomic but is safe in practice — concurrent {@link #emit} calls do not occur.
  */
-final class AsyncCaptureEventSink implements CaptureEventSink {
+public final class AsyncCaptureEventSink implements CaptureEventSink {
 
     private final CaptureEventSink delegate;
     private final ArrayBlockingQueue<CaptureEvent> queue;
@@ -22,7 +22,7 @@ final class AsyncCaptureEventSink implements CaptureEventSink {
     private final Thread drainThread;
     private volatile boolean closed = false;
 
-    AsyncCaptureEventSink(CaptureEventSink delegate, int capacity) {
+    public AsyncCaptureEventSink(CaptureEventSink delegate, int capacity) {
         this.delegate = delegate;
         this.queue = new ArrayBlockingQueue<>(capacity);
         this.drainThread = new Thread(this::drainLoop, "faro-async-drain");
