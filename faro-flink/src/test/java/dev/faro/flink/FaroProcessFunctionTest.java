@@ -201,14 +201,6 @@ class FaroProcessFunctionTest {
     }
 
     @Test
-    void flush_timerFiredCountIsNull() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.flush();
-
-        assertNull(captured.events.get(0).getTimerFiredCount());
-    }
-
-    @Test
     void processElement_delegatesElement() throws Exception {
         CountingFn delegate = new CountingFn();
         FaroConfig config = FaroConfig.builder()

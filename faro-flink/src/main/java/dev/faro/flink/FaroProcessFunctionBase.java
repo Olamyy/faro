@@ -2,11 +2,14 @@ package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
 import org.apache.flink.api.common.functions.RichFunction;
+import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 
 import javax.annotation.Nonnull;
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
@@ -34,7 +37,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * minimum. Both are {@code null} when no records with a non-{@code Long.MIN_VALUE} timestamp
  * arrived in the interval.
  */
-abstract class FaroProcessFunctionBase<IN, OUT> {
+class FaroProcessFunctionBase<IN, OUT> implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final Set<CaptureEvent.OperatorType> VALID_TYPES =
             Set.of(CaptureEvent.OperatorType.FILTER,
@@ -43,8 +49,11 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
 
     final CaptureEvent.OperatorType operatorType;
     final FaroConfig config;
-    final CaptureEventSink captureEventSink;
+    final CaptureEventSinkFactory captureEventSinkFactory;
 
+    /** The enclosing Flink operator. Transient — it carries its own serialization. */
+    transient RichFunction owner;
+    transient CaptureEventSink captureEventSink;
     transient String operatorId;
     transient String traceId;
     transient AtomicLong inputCounter;
@@ -59,17 +68,25 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
      */
     transient volatile long lastWatermarkMs;
 
+    /**
+     * Optional timer counter wired by {@link FaroKeyedProcessFunction}. When non-null,
+     * {@link #timerFiredCountSnapshot()} returns and resets this counter.
+     */
+    transient AtomicLong timerCounterRef;
+
     FaroProcessFunctionBase(
             CaptureEvent.OperatorType operatorType,
             FaroConfig config,
-            CaptureEventSink captureEventSink) {
+            CaptureEventSinkFactory captureEventSinkFactory,
+            RichFunction owner) {
         if (!VALID_TYPES.contains(operatorType)) {
             throw new IllegalArgumentException(
                     "FaroProcessFunctionBase: operatorType must be FILTER, MAP, or AGG; got " + operatorType);
         }
         this.operatorType = operatorType;
         this.config = config;
-        this.captureEventSink = captureEventSink;
+        this.captureEventSinkFactory = captureEventSinkFactory;
+        this.owner = owner;
     }
 
     /**
@@ -78,7 +95,9 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
      *
      * @throws IllegalStateException if the operator has no stable UID
      */
-    void open(Configuration parameters, Object delegate) throws Exception {
+    void open(Configuration parameters, RichFunction ownerFn, Object delegate) throws Exception {
+        this.owner = ownerFn;
+        this.captureEventSink = captureEventSinkFactory.create();
         this.operatorId = getOperatorID();
         this.traceId = newTraceId();
         this.inputCounter = new AtomicLong(0);
@@ -108,7 +127,9 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
         return uid;
     }
 
-    abstract org.apache.flink.api.common.functions.RuntimeContext getRuntimeContext();
+    RuntimeContext getRuntimeContext() {
+        return owner.getRuntimeContext();
+    }
 
     /**
      * Shared {@code processElement} body. Increments input counter, records timestamp and
@@ -149,7 +170,7 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
     }
 
     protected Long timerFiredCountSnapshot() {
-        return null;
+        return timerCounterRef != null ? timerCounterRef.getAndSet(0) : null;
     }
 
     void flush() {
@@ -196,8 +217,10 @@ abstract class FaroProcessFunctionBase<IN, OUT> {
     }
 
     void close(Object delegate) throws Exception {
-        flush();
-        captureEventSink.close();
+        if (captureEventSink != null) {
+            flush();
+            captureEventSink.close();
+        }
         if (delegate instanceof RichFunction) {
             ((RichFunction) delegate).close();
         }

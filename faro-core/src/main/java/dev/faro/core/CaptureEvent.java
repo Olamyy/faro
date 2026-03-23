@@ -214,7 +214,6 @@ public final class CaptureEvent {
     private static final ObjectMapper JSON = new ObjectMapper()
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
-    /** Serialise this event to a compact JSON string. */
     public String toJson() {
         try {
             return JSON.writeValueAsString(this);

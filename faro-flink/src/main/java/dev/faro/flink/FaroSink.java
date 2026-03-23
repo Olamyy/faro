@@ -55,8 +55,9 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
 
     private final SinkFunction<IN> delegate;
     private final FaroConfig config;
-    private final CaptureEventSink captureEventSink;
+    private final CaptureEventSinkFactory captureEventSinkFactory;
 
+    private transient CaptureEventSink captureEventSink;
     private transient String operatorId;
     private transient String traceId;
     private transient AtomicLong inputCounter;
@@ -64,10 +65,10 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
     private transient long intervalStartMs;
     private transient volatile long lastWatermark;
 
-    public FaroSink(SinkFunction<IN> delegate, FaroConfig config, CaptureEventSink captureEventSink) {
+    public FaroSink(SinkFunction<IN> delegate, FaroConfig config, CaptureEventSinkFactory captureEventSinkFactory) {
         this.delegate = delegate;
         this.config = config;
-        this.captureEventSink = captureEventSink;
+        this.captureEventSinkFactory = captureEventSinkFactory;
     }
 
     @Override
@@ -82,6 +83,7 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
                     "Without a stable UID, lineage correlation will break across restarts.");
         }
 
+        this.captureEventSink = captureEventSinkFactory.create();
         this.operatorId = uid;
         this.traceId = newTraceId();
         this.inputCounter = new AtomicLong(0);
@@ -107,8 +109,10 @@ public final class FaroSink<IN> extends RichSinkFunction<IN> {
 
     @Override
     public void close() throws Exception {
-        flush();
-        captureEventSink.close();
+        if (captureEventSink != null) {
+            flush();
+            captureEventSink.close();
+        }
         if (delegate instanceof RichSinkFunction) {
             ((RichSinkFunction<IN>) delegate).close();
         }
