@@ -5,9 +5,10 @@ import dev.faro.flink.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
 import dev.faro.flink.FaroConfig;
 import dev.faro.flink.FaroSink;
-import dev.faro.flink.KafkaCaptureEventSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.connector.datagen.source.DataGeneratorSource;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -17,8 +18,6 @@ import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindo
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
-import org.apache.flink.api.connector.sink2.Sink;
-import org.apache.flink.api.connector.sink2.SinkWriter;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -27,25 +26,28 @@ import java.time.Duration;
 import java.util.Random;
 
 /**
- * Unbounded end-to-end Faro demonstration job. Run until cancelled via the Flink UI or
- * {@code flink cancel}.
+ * Shared sensor pipeline wiring. Accepts a {@link CaptureEventSinkFactory} so each entry-point
+ * job can supply its own sink without duplicating the pipeline definition.
+ *
+ * <p>The factory is automatically wrapped in {@link AsyncCaptureEventSink} with a capacity of
+ * 1,000 so capture events never block the operator thread regardless of the chosen sink.
  */
-public final class SensorPipelineJob {
+final class SensorPipeline {
 
     private static final String[] DEVICES = {"device-A", "device-B", "device-C", "device-D"};
     private static final long WINDOW_SIZE_MS = 10_000L;
     private static final double RECORDS_PER_SECOND = 8.0;
 
-    public static void main(String[] args) throws Exception {
+    private SensorPipeline() {}
+
+    static void execute(CaptureEventSinkFactory innerFactory, String jobName) throws Exception {
         FaroConfig config = FaroConfig.builder()
                 .pipelineId("sensor-pipeline-e2e")
                 .features("temperature")
                 .build();
 
-        String bootstrapServers = System.getenv().getOrDefault("KAFKA_BOOTSTRAP", "redpanda:29092");
-        CaptureEventSinkFactory kafkaFactory = KafkaCaptureEventSink.factory(bootstrapServers);
         CaptureEventSinkFactory sinkFactory =
-                () -> new AsyncCaptureEventSink(kafkaFactory.create(), 1_000);
+                () -> new AsyncCaptureEventSink(innerFactory.create(), 1_000);
         Faro faro = new Faro(config, sinkFactory);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -79,7 +81,7 @@ public final class SensorPipelineJob {
                 .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), config, sinkFactory, "sink.file"))
                 .uid("sink.file");
 
-        env.execute("sensor-pipeline-e2e");
+        env.execute(jobName);
     }
 
     private static final class TemperatureSumFn
@@ -89,35 +91,33 @@ public final class SensorPipelineJob {
         public void process(String deviceId, Context ctx,
                 Iterable<SensorReading> elements, Collector<SensorReading> out) {
             double sum = 0;
-            long windowStart = ctx.window().getStart();
             for (SensorReading r : elements) {
                 sum += r.temperature;
             }
-            out.collect(new SensorReading(deviceId, sum, windowStart));
+            out.collect(new SensorReading(deviceId, sum, ctx.window().getStart()));
         }
     }
 
     private record FileSink<T>(String path) implements Sink<T> {
 
         @Override
-            public SinkWriter<T> createWriter(InitContext context) throws IOException {
-                PrintWriter writer = new PrintWriter(new FileWriter(path, true));
-                return new SinkWriter<>() {
-                    @Override
-                    public void write(T element, Context ctx) {
-                        writer.println(element);
-                        writer.flush();
-                    }
+        public SinkWriter<T> createWriter(InitContext context) throws IOException {
+            PrintWriter writer = new PrintWriter(new FileWriter(path, true));
+            return new SinkWriter<>() {
+                @Override
+                public void write(T element, Context ctx) {
+                    writer.println(element);
+                    writer.flush();
+                }
 
-                    @Override
-                    public void flush(boolean endOfInput) {
-                    }
+                @Override
+                public void flush(boolean endOfInput) {}
 
-                    @Override
-                    public void close() {
-                        writer.close();
-                    }
-                };
-            }
+                @Override
+                public void close() {
+                    writer.close();
+                }
+            };
         }
+    }
 }
