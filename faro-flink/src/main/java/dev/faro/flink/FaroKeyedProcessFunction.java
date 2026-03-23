@@ -10,20 +10,11 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Faro observability decorator for Flink {@link KeyedProcessFunction}.
  *
- * <p>Wraps a delegate {@link KeyedProcessFunction} and emits {@link CaptureEvent} instances on
- * each flush interval. The delegate is invoked first on every element and timer callback;
- * capture is best-effort and never interferes with pipeline execution.
+ * <p>Extends {@link FaroProcessFunction} behaviour with {@code timer_fired_count}: the number
+ * of {@link #onTimer} callbacks fired since the last flush, reset on each flush.
  *
- * <p>In addition to the metrics captured by {@link FaroProcessFunction}, this class tracks the
- * number of timer callbacks ({@code timer_fired_count}) fired since the last flush interval.
- * The count is reset on each flush.
- *
- * <p>Operator type must be {@code FILTER}, {@code MAP}, or {@code AGG}. See
- * {@link FaroProcessFunctionBase} for UID and watermark semantics.
- *
- * @param <KEY> key type
- * @param <IN>  input type
- * @param <OUT> output type
+ * <p>See {@link FaroProcessFunctionBase} for operator type constraints, UID requirements,
+ * and watermark semantics.
  */
 public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFunction<KEY, IN, OUT> {
 

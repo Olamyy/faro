@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+ext {
+    flinkVersion = '1.18.0'
+}
+
+dependencies {
+    implementation project(':faro-flink')
+
+    implementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    implementation "org.apache.flink:flink-java:${flinkVersion}"
+    implementation "org.apache.flink:flink-clients:${flinkVersion}"
+    implementation "org.apache.flink:flink-connector-datagen:${flinkVersion}"
+}
+
+shadowJar {
+    archiveBaseName = 'faro-e2e'
+    archiveClassifier = ''
+    archiveVersion = ''
+
+    manifest {
+        attributes 'Main-Class': 'dev.faro.e2e.SensorPipelineJob'
+    }
+
+    mergeServiceFiles()
+}

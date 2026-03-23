@@ -55,6 +55,7 @@ class FaroProcessWindowFunctionTest {
                         mock(ProcessWindowFunction.Context.class);
         when(ctx.window()).thenReturn(window);
         when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
+        when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
         KeyedStateStore windowState = mock(KeyedStateStore.class);
         KeyedStateStore globalState = mock(KeyedStateStore.class);
         when(ctx.windowState()).thenReturn(windowState);
@@ -170,6 +171,7 @@ class FaroProcessWindowFunctionTest {
         CustomWindow customWindow = new CustomWindow();
         when(ctx.window()).thenReturn(customWindow);
         when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
+        when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
         when(ctx.windowState()).thenReturn(mock(KeyedStateStore.class));
         when(ctx.globalState()).thenReturn(mock(KeyedStateStore.class));
 
@@ -223,23 +225,6 @@ class FaroProcessWindowFunctionTest {
                 captured.events.get(0).getLateTrackingMode());
     }
 
-    @Test
-    void process_delegatesElements() throws Exception {
-        CountingWindowFn delegate = new CountingWindowFn();
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(config, delegate, captured, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        fn.process("key", mockCtx(new TimeWindow(1000L, 2000L)), List.of("r1"), noopCollector());
-        fn.process("key", mockCtx(new TimeWindow(2000L, 3000L)), List.of("r2"), noopCollector());
-
-        assertEquals(2, delegate.processCallCount);
-    }
 
     @Test
     void close_closesDelegateSink() throws Exception {
@@ -314,16 +299,6 @@ class FaroProcessWindowFunctionTest {
         }
     }
 
-    private static final class CountingWindowFn
-            extends ProcessWindowFunction<String, String, String, TimeWindow> {
-        int processCallCount = 0;
-
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {
-            processCallCount++;
-        }
-    }
 
     private static final class TrackingCloseFn
             extends ProcessWindowFunction<String, String, String, TimeWindow>

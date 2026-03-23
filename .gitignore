@@ -229,3 +229,4 @@ test_env/*
 *.rlib
 GTM
 *.md
+faro-e2e/output/*

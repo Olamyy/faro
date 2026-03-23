@@ -2,3 +2,4 @@ rootProject.name = 'faro'
 
 include 'faro-core'
 include 'faro-flink'
+include 'faro-e2e'

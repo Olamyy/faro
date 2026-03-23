@@ -17,9 +17,5 @@ import java.io.Serializable;
 @FunctionalInterface
 public interface CaptureEventSinkFactory extends Serializable {
 
-    /**
-     * Create a new {@link CaptureEventSink}. Called once per operator instance inside
-     * {@code open()}.
-     */
     CaptureEventSink create();
 }

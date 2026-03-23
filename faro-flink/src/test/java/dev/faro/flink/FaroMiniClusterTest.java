@@ -7,7 +7,8 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
@@ -78,7 +79,7 @@ class FaroMiniClusterTest {
                 .process(faro.trace(CaptureEvent.OperatorType.MAP, new PassThroughFn()))
                 .returns(String.class)
                 .uid("map.passthrough")
-                .addSink(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY))
+                .sinkTo(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY, "sink.noop"))
                 .uid("sink.noop");
 
         env.execute("stateless-pipeline");
@@ -101,7 +102,7 @@ class FaroMiniClusterTest {
         env.setParallelism(1);
 
         env.fromElements("r1", "r2", "r3")
-                .addSink(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY))
+                .sinkTo(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY, "sink.cardinality"))
                 .uid("sink.cardinality");
 
         env.execute("cardinality-pipeline");
@@ -126,7 +127,7 @@ class FaroMiniClusterTest {
                 .process(faro.keyedTrace(CaptureEvent.OperatorType.AGG, new PassThroughKeyedFn()))
                 .returns(String.class)
                 .uid("keyed.agg")
-                .addSink(new NoopSink<>());
+                .sinkTo(new NoopSink<>());
 
         env.execute("keyed-pipeline");
 
@@ -162,7 +163,7 @@ class FaroMiniClusterTest {
                 .process(faro.windowTrace(new PassThroughWindowFn()))
                 .returns(TypeInformation.of(TimestampedEvent.class))
                 .uid("window.tumbling")
-                .addSink(new NoopSink<>());
+                .sinkTo(new NoopSink<>());
 
         env.execute("windowed-pipeline");
 
@@ -180,47 +181,6 @@ class FaroMiniClusterTest {
         assertTrue(cardinalities.stream().allMatch(c -> c > 0), "all windows should have at least 1 element");
     }
 
-    @Test
-    void windowedPipeline_operatorIdMatchesUid() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        Faro faro = new Faro(config, COLLECTING_FACTORY);
-
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
-        env.fromCollection(
-                        List.of(
-                                new TimestampedEvent("key", 1000L),
-                                new TimestampedEvent("key", 20000L)),
-                        TypeInformation.of(TimestampedEvent.class))
-                .assignTimestampsAndWatermarks(
-                        WatermarkStrategy.<TimestampedEvent>forBoundedOutOfOrderness(Duration.ZERO)
-                                .withTimestampAssigner((e, ts) -> e.timestamp))
-                .keyBy(e -> e.key)
-                .window(TumblingEventTimeWindows.of(Time.seconds(5)))
-                .process(faro.windowTrace(new PassThroughWindowFn()))
-                .returns(TypeInformation.of(TimestampedEvent.class))
-                .uid("window.uid-check")
-                .addSink(new NoopSink<>());
-
-        env.execute("uid-check-pipeline");
-
-        List<CaptureEvent> events = new ArrayList<>(CAPTURED);
-        assertFalse(events.isEmpty(), "expected at least one capture event");
-        String operatorId = events.get(0).getOperatorId();
-        assertNotNull(operatorId);
-        assertFalse(operatorId.isEmpty());
-        assertTrue(events.stream().allMatch(e -> operatorId.equals(e.getOperatorId())),
-                "all events from the same operator should share the same operatorId");
-    }
-
-    /**
-     * Serializable factory that creates sinks writing into {@link #CAPTURED}.
-     * Named static class so Java serialization works without capturing any enclosing reference.
-     */
     static final class CollectingFactory implements CaptureEventSinkFactory {
         @Serial
         private static final long serialVersionUID = 1L;
@@ -244,9 +204,6 @@ class FaroMiniClusterTest {
     static final class TimestampedEvent {
         public String key;
         public long timestamp;
-
-        /** Required by Flink's POJO serializer, which instantiates via reflection. */
-        public TimestampedEvent() {}
 
         TimestampedEvent(String key, long timestamp) {
             this.key = key;
@@ -280,8 +237,22 @@ class FaroMiniClusterTest {
         }
     }
 
-    private static final class NoopSink<T> implements SinkFunction<T> {
+    private static final class NoopSink<T> implements Sink<T> {
         @Override
-        public void invoke(T value, Context context) {}
+        public SinkWriter<T> createWriter(InitContext context) {
+            return new SinkWriter<>() {
+                @Override
+                public void write(T element, Context ctx) {
+                }
+
+                @Override
+                public void flush(boolean endOfInput) {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
     }
 }

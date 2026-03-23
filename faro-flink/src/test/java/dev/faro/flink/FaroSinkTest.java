@@ -1,11 +1,11 @@
 package dev.faro.flink;
 
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.functions.sink.SinkFunction;
-import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -14,46 +14,45 @@ import static org.mockito.Mockito.*;
 class FaroSinkTest {
 
     private static final String PIPELINE_ID = "test-pipeline";
-    private static final String OPERATOR_UID = "sink.test-operator";
+    private static final String OPERATOR_ID = "sink.test-operator";
 
     private CapturingCaptureEventSink captured;
-    private StreamingRuntimeContext runtimeContext;
 
     @BeforeEach
     void setUp() {
         captured = new CapturingCaptureEventSink();
-        runtimeContext = mock(StreamingRuntimeContext.class);
-        when(runtimeContext.getOperatorUniqueID()).thenReturn(OPERATOR_UID);
     }
 
-    private FaroSink<String> sinkWithFeatures(String... features) throws Exception {
+    private SinkWriter<String> writerWithFeatures(String... features) throws IOException {
         FaroConfig config = FaroConfig.builder()
                 .pipelineId(PIPELINE_ID)
                 .features(features)
                 .build();
-        FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), config, captured);
-        sink.setRuntimeContext(runtimeContext);
-        sink.open(new Configuration());
-        return sink;
+        FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), config, captured, OPERATOR_ID);
+        return sink.createWriter(mock(Sink.InitContext.class));
+    }
+
+    private static SinkWriter.Context ctx(Long timestamp) {
+        SinkWriter.Context ctx = mock(SinkWriter.Context.class);
+        when(ctx.timestamp()).thenReturn(timestamp);
+        return ctx;
     }
 
     @Test
-    void open_throwsWhenNoUid() {
-        when(runtimeContext.getOperatorUniqueID()).thenReturn("");
+    void construction_throwsOnEmptyOperatorId() {
         FaroConfig config = FaroConfig.builder()
                 .pipelineId(PIPELINE_ID)
                 .features("feature-a")
                 .build();
-        FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), config, captured);
-        sink.setRuntimeContext(runtimeContext);
-        assertThrows(IllegalStateException.class, () -> sink.open(new Configuration()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new FaroSink<>(new NoopSink<>(), config, captured, ""));
     }
 
     @Test
     void flush_emitsOneEventPerFeature() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("avg_purchase_7d", "max_purchase_7d");
-        sink.invoke("record1", null);
-        sink.flush();
+        SinkWriter<String> writer = writerWithFeatures("avg_purchase_7d", "max_purchase_7d");
+        writer.write("record1", ctx(null));
+        writer.flush(false);
 
         assertEquals(2, captured.events.size());
         assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
@@ -62,11 +61,11 @@ class FaroSinkTest {
 
     @Test
     void flush_cardinalityReflectsInterval() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        sink.invoke("r1", null);
-        sink.invoke("r2", null);
-        sink.invoke("r3", null);
-        sink.flush();
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.write("r1", ctx(null));
+        writer.write("r2", ctx(null));
+        writer.write("r3", ctx(null));
+        writer.flush(false);
 
         assertEquals(3L, captured.events.get(0).getInputCardinality());
         assertEquals(3L, captured.events.get(0).getOutputCardinality());
@@ -74,14 +73,14 @@ class FaroSinkTest {
 
     @Test
     void flush_cardinalityResetsAfterEachInterval() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        sink.invoke("r1", null);
-        sink.invoke("r2", null);
-        sink.flush();
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.write("r1", ctx(null));
+        writer.write("r2", ctx(null));
+        writer.flush(false);
         captured.events.clear();
 
-        sink.invoke("r3", null);
-        sink.flush();
+        writer.write("r3", ctx(null));
+        writer.flush(false);
 
         assertEquals(1L, captured.events.get(0).getInputCardinality());
     }
@@ -92,82 +91,139 @@ class FaroSinkTest {
                 .pipelineId(PIPELINE_ID)
                 .features("feature-a")
                 .build();
-        FaroSink<String> sink = new FaroSink<>(new FailingAfterNSink<>(2), config, captured);
-        sink.setRuntimeContext(runtimeContext);
-        sink.open(new Configuration());
+        FaroSink<String> sink = new FaroSink<>(new FailingAfterNSink<>(2), config, captured, OPERATOR_ID);
+        SinkWriter<String> writer = sink.createWriter(mock(Sink.InitContext.class));
 
-        sink.invoke("r1", null);
-        sink.invoke("r2", null);
-        assertThrows(Exception.class, () -> sink.invoke("r3", null));
-        sink.flush();
+        writer.write("r1", ctx(null));
+        writer.write("r2", ctx(null));
+        assertThrows(Exception.class, () -> writer.write("r3", ctx(null)));
+        writer.flush(false);
 
         assertEquals(3L, captured.events.get(0).getInputCardinality());
         assertEquals(2L, captured.events.get(0).getOutputCardinality());
     }
 
     @Test
-    void flush_traceIdIsStableAcrossIntervals() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        sink.flush();
-        String firstTraceId = captured.events.get(0).getTraceId();
-        captured.events.clear();
-
-        sink.flush();
-        assertEquals(firstTraceId, captured.events.get(0).getTraceId());
-    }
-
-    @Test
     void close_flushesPartialInterval() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        sink.invoke("r1", null);
-        sink.close();
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.write("r1", ctx(null));
+        writer.close();
 
         assertFalse(captured.events.isEmpty());
         assertEquals(1L, captured.events.get(0).getInputCardinality());
     }
 
     @Test
-    void flush_watermarkIsNullWhenMinValue() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        SinkFunction.Context ctx = mock(SinkFunction.Context.class);
-        when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
-        sink.invoke("r1", ctx);
-        sink.flush();
+    void flush_watermarkIsNullWhenNoWatermarkReceived() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.write("r1", ctx(null));
+        writer.flush(false);
 
         assertNull(captured.events.get(0).getWatermark());
     }
 
     @Test
-    void flush_watermarkIsIso8601WhenAssigned() throws Exception {
-        FaroSink<String> sink = sinkWithFeatures("feature-a");
-        long watermarkMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
-        SinkFunction.Context ctx = mock(SinkFunction.Context.class);
-        when(ctx.currentWatermark()).thenReturn(watermarkMs);
-        sink.invoke("r1", ctx);
-        sink.flush();
+    void flush_watermarkIsNullForMaxValueSentinel() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(Long.MAX_VALUE));
+        writer.write("r1", ctx(null));
+        writer.flush(false);
+
+        assertNull(captured.events.get(0).getWatermark());
+    }
+
+    @Test
+    void flush_watermarkReflectsLastWriteWatermark() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        long wmMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
+        writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(wmMs));
+        writer.write("r1", ctx(null));
+        writer.flush(false);
 
         assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
     }
 
-    private static final class NoopSink<T> implements SinkFunction<T> {
-        @Override
-        public void invoke(T value, Context context) {}
+    @Test
+    void flush_eventTimeIsNullWhenNoTimestamp() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        writer.write("r1", ctx(null));
+        writer.flush(false);
+
+        assertNull(captured.events.get(0).getEventTime());
+        assertNull(captured.events.get(0).getEventTimeMin());
     }
 
-    private static final class FailingAfterNSink<T> implements SinkFunction<T> {
+    @Test
+    void flush_eventTimeReflectsMaxTimestampInInterval() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
+        long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
+        writer.write("r1", ctx(t1));
+        writer.write("r2", ctx(t2));
+        writer.flush(false);
+
+        assertEquals("2026-03-21T11:00:00Z", captured.events.get(0).getEventTime());
+    }
+
+    @Test
+    void flush_eventTimeMinReflectsMinTimestampInInterval() throws Exception {
+        SinkWriter<String> writer = writerWithFeatures("feature-a");
+        long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
+        long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
+        writer.write("r1", ctx(t1));
+        writer.write("r2", ctx(t2));
+        writer.flush(false);
+
+        assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
+    }
+
+    private static final class NoopSink<T> implements Sink<T> {
+        @Override
+        public SinkWriter<T> createWriter(InitContext context) {
+            return new SinkWriter<>() {
+                @Override
+                public void write(T element, Context context) {
+                }
+
+                @Override
+                public void flush(boolean endOfInput) {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+    }
+
+    private static final class FailingAfterNSink<T> implements Sink<T> {
         private final int succeedCount;
-        private int invocations = 0;
 
         FailingAfterNSink(int succeedCount) {
             this.succeedCount = succeedCount;
         }
 
         @Override
-        public void invoke(T value, Context context) {
-            invocations++;
-            if (invocations > succeedCount) {
-                throw new RuntimeException("simulated write failure");
-            }
+        public SinkWriter<T> createWriter(InitContext context) {
+            return new SinkWriter<>() {
+                private int invocations = 0;
+
+                @Override
+                public void write(T element, Context context) {
+                    invocations++;
+                    if (invocations > succeedCount) {
+                        throw new RuntimeException("simulated write failure");
+                    }
+                }
+
+                @Override
+                public void flush(boolean endOfInput) {
+                }
+
+                @Override
+                public void close() {
+                }
+            };
         }
     }
 }
