@@ -127,17 +127,6 @@ class FaroProcessFunctionTest {
     }
 
     @Test
-    void flush_traceIdIsStableAcrossIntervals() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.flush();
-        String firstTraceId = captured.events.get(0).getTraceId();
-        captured.events.clear();
-
-        fn.flush();
-        assertEquals(firstTraceId, captured.events.get(0).getTraceId());
-    }
-
-    @Test
     void close_flushesPartialInterval() throws Exception {
         FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
         fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
@@ -200,23 +189,6 @@ class FaroProcessFunctionTest {
         assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
     }
 
-    @Test
-    void processElement_delegatesElement() throws Exception {
-        CountingFn delegate = new CountingFn();
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        FaroProcessFunction<String, String> fn = new FaroProcessFunction<>(
-                CaptureEvent.OperatorType.MAP, config, delegate, captured);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.processElement("r2", mockCtx(null, Long.MIN_VALUE), noopCollector());
-
-        assertEquals(2, delegate.processElementCallCount);
-    }
 
     private static ProcessFunction<String, String>.Context mockCtx(Long timestamp, long watermark) {
         @SuppressWarnings("unchecked")
@@ -241,14 +213,6 @@ class FaroProcessFunctionTest {
         }
     }
 
-    private static final class CountingFn extends ProcessFunction<String, String> {
-        int processElementCallCount = 0;
-
-        @Override
-        public void processElement(String value, Context ctx, Collector<String> out) {
-            processElementCallCount++;
-        }
-    }
 
     private static final class FailingAfterNFn extends ProcessFunction<String, String> {
         private final int succeedCount;

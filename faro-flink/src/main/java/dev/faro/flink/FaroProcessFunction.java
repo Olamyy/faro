@@ -8,15 +8,8 @@ import org.apache.flink.util.Collector;
 /**
  * Faro observability decorator for Flink {@link ProcessFunction}.
  *
- * <p>Wraps a delegate {@link ProcessFunction} and emits {@link CaptureEvent} instances on each
- * flush interval. The delegate is invoked first on every element; capture is best-effort and
- * never interferes with pipeline execution.
- *
- * <p>Operator type must be {@code FILTER}, {@code MAP}, or {@code AGG}. See
- * {@link FaroProcessFunctionBase} for UID and watermark semantics.
- *
- * @param <IN>  input type
- * @param <OUT> output type
+ * <p>See {@link FaroProcessFunctionBase} for operator type constraints, UID requirements,
+ * and watermark semantics.
  */
 public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT> {
 

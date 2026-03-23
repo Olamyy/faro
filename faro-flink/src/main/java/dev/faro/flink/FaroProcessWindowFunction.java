@@ -12,27 +12,20 @@ import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Faro observability decorator for Flink {@link ProcessWindowFunction}.
  *
  * <p>Emits one {@link CaptureEvent} per feature name on every window trigger. Window bounds,
  * input and output cardinality, late-event count (when a side-output tag is supplied), and
- * processing time are captured at the moment of window close.
+ * processing time are captured at window close.
  *
  * <p>A stable operator UID must be set via {@code operator.uid("...")}. {@link #open} throws
  * {@link IllegalStateException} if the UID is absent or empty.
  *
- * <p>Watermark is always {@code null}: {@code ProcessWindowFunction.Context} does not expose
- * the current watermark. Window bounds serve as the temporal anchor.
- *
- * @param <IN>  input element type
- * @param <OUT> output element type
- * @param <KEY> key type
- * @param <W>   window type
+ * <p>{@code watermark} is always {@code null}: {@code ProcessWindowFunction.Context} does not
+ * expose the current watermark. Window bounds serve as the temporal anchor.
  */
 public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         extends ProcessWindowFunction<IN, OUT, KEY, W> {
@@ -71,7 +64,7 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         }
         this.captureEventSink = captureEventSinkFactory.create();
         this.operatorId = uid;
-        this.traceId = newTraceId();
+        this.traceId = FaroProcessFunctionBase.newTraceId();
 
         if (delegate != null) {
             delegate.setRuntimeContext(getRuntimeContext());
@@ -105,15 +98,22 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
 
         String windowStart = null;
         String windowEnd = null;
+        String eventTime = null;
+        String eventTimeMin = null;
         long emitIntervalMs = 0;
         if (ctx.window() instanceof TimeWindow tw) {
             windowStart = Instant.ofEpochMilli(tw.getStart()).toString();
             windowEnd = Instant.ofEpochMilli(tw.getEnd()).toString();
             emitIntervalMs = tw.getEnd() - tw.getStart();
+            eventTime = Instant.ofEpochMilli(tw.getEnd() - 1).toString();
+            eventTimeMin = Instant.ofEpochMilli(tw.getStart()).toString();
         }
 
+        long wmMs = countingContext.currentWatermark();
+        String watermark = wmMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(wmMs).toString();
+
         String processingTime = Instant.ofEpochMilli(ctx.currentProcessingTime()).toString();
-        String spanId = newSpanId();
+        String spanId = FaroProcessFunctionBase.newSpanId();
         List<String> features = config.getFeatureNames();
 
         for (String featureName : features) {
@@ -131,9 +131,9 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
                     .windowEnd(windowEnd)
                     .lateEventCount(lateEventCount)
                     .lateTrackingMode(lateTrackingMode)
-                    .watermark(null)
-                    .eventTime(null)
-                    .eventTimeMin(null)
+                    .watermark(watermark)
+                    .eventTime(eventTime)
+                    .eventTimeMin(eventTimeMin)
                     .traceId(traceId)
                     .spanId(spanId)
                     .captureDropSinceLast(false)
@@ -177,10 +177,6 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         }
     }
 
-    /**
-     * Wraps the real {@link Context} and intercepts {@link #output} calls for the configured
-     * late-data side-output tag to count late events.
-     */
     final class CountingContext extends ProcessWindowFunction<IN, OUT, KEY, W>.Context {
 
         private final Context inner;
@@ -225,15 +221,4 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         }
     }
 
-    private static String newTraceId() {
-        byte[] bytes = new byte[16];
-        ThreadLocalRandom.current().nextBytes(bytes);
-        return HexFormat.of().formatHex(bytes);
-    }
-
-    private static String newSpanId() {
-        byte[] bytes = new byte[8];
-        ThreadLocalRandom.current().nextBytes(bytes);
-        return HexFormat.of().formatHex(bytes);
-    }
 }

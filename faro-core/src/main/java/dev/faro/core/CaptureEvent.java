@@ -15,13 +15,11 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 
 /**
- * Faro capture event — the unit of observability emitted by every instrumented operator.
+ * Immutable capture event emitted by every instrumented operator.
  *
- * <p>Immutable. Construct via {@link Builder}. Required fields are enforced at build time.
- * The Avro schema is loaded from {@code faro-event-v1.avsc} in the classpath resources.
- *
- * <p>Wire format: Avro on {@code faro.capture.events}. JSON available via {@link #toJson()}.
- * Schema version: 1.0.0 (frozen 2026-03-21).
+ * <p>Construct via {@link Builder}. Required fields are enforced at build time.
+ * Wire format: Avro on {@code faro.capture.events}. JSON available via {@link #toJson()}.
+ * The Avro schema is loaded from {@code faro-event-v1.avsc} on the classpath.
  */
 public final class CaptureEvent {
 
@@ -222,7 +220,6 @@ public final class CaptureEvent {
         }
     }
 
-    /** Deserialise a JSON string produced by {@link #toJson()}. */
     public static CaptureEvent fromJson(String json) {
         try {
             return JSON.readValue(json, CaptureEvent.class);
@@ -247,17 +244,10 @@ public final class CaptureEvent {
         }
     }
 
-    /** Return the parsed Avro schema (loaded once at class init). */
     public static Schema avroSchema() {
         return AVRO_SCHEMA;
     }
 
-    /**
-     * Convert this event to an Avro {@link GenericRecord} using the v1 schema.
-     *
-     * <p>The returned record is suitable for use with an Avro {@code DatumWriter}
-     * or the Kafka Avro serialiser.
-     */
     public GenericRecord toAvroRecord() {
         GenericRecord record = new GenericData.Record(AVRO_SCHEMA);
 
@@ -311,11 +301,7 @@ public final class CaptureEvent {
         return record;
     }
 
-    /**
-     * Deserialise a {@link GenericRecord} produced by Avro v1 into a {@code CaptureEvent}.
-     *
-     * <p>String fields are extracted via {@code toString()} to handle Avro {@code Utf8}.
-     */
+    /** String fields are extracted via {@code toString()} to handle Avro {@link org.apache.avro.util.Utf8}. */
     public static CaptureEvent fromAvroRecord(GenericRecord r) {
         return new Builder()
                 .pipelineId(str(r, "pipeline_id"))
@@ -494,9 +480,6 @@ public final class CaptureEvent {
         public Builder upstreamSystem(String v)       { this.upstreamSystem = v; return this; }
         public Builder parentSpanId(String v)         { this.parentSpanId = v; return this; }
 
-        /**
-         * @throws IllegalStateException if any required field is null or empty.
-         */
         public CaptureEvent build() {
             requireNonEmpty(pipelineId,    "pipeline_id");
             requireNonEmpty(operatorId,    "operator_id");

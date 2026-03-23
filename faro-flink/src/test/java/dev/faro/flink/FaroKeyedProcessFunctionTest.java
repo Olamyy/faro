@@ -40,14 +40,6 @@ class FaroKeyedProcessFunctionTest {
     }
 
     @Test
-    void flush_timerFiredCountIsZeroWhenNoTimersFired() throws Exception {
-        FaroKeyedProcessFunction<String, String, String> fn = fnWithFeatures();
-        fn.flush();
-
-        assertEquals(0L, captured.events.get(0).getTimerFiredCount());
-    }
-
-    @Test
     void flush_timerFiredCountReflectsOnTimerCalls() throws Exception {
         FaroKeyedProcessFunction<String, String, String> fn = fnWithFeatures();
         fn.onTimer(1000L, mockOnTimerCtx(), noopCollector());

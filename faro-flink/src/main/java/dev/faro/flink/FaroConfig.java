@@ -4,13 +4,10 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * Per-pipeline configuration supplied to {@link FaroSink} at construction time.
+ * Per-pipeline configuration for Faro instrumentation.
  *
- * <p>Specifies the pipeline identity and the features computed at the sink.
- * Infrastructure concerns (where to send events) belong in
- * {@link CaptureEventSink} implementations, not here.
- *
- * <p>Construct via {@link Builder}. {@code pipelineId} and at least one feature are required.
+ * <p>Infrastructure concerns (where to send events) belong in {@link CaptureEventSink}
+ * implementations. {@code pipelineId} and at least one feature name are required.
  */
 public final class FaroConfig implements Serializable {
 
