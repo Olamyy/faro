@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFunction<KEY, IN, OUT> {
 
     private final KeyedProcessFunction<KEY, IN, OUT> delegate;
-    private final FaroProcessFunctionBase<IN, OUT> base;
+    private final FaroProcessFunctionBase base;
 
     private transient AtomicLong timerCounter;
 
@@ -29,7 +29,7 @@ public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFu
             KeyedProcessFunction<KEY, IN, OUT> delegate,
             CaptureEventSinkFactory captureEventSinkFactory) {
         this.delegate = delegate;
-        this.base = new FaroProcessFunctionBase<>(operatorType, config, captureEventSinkFactory, this);
+        this.base = new FaroProcessFunctionBase(operatorType, config, captureEventSinkFactory, this);
     }
 
     @Override

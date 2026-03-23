@@ -29,13 +29,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * End-to-end tests running instrumented Flink jobs on a MiniCluster.
- *
- * <p>Each test submits a finite job via {@link StreamExecutionEnvironment#execute()}, which
- * blocks until the job completes. Capture events are written into a static
- * {@link ConcurrentLinkedQueue} shared across all operator subtasks and the test thread.
- */
 class FaroMiniClusterTest {
 
     @RegisterExtension
@@ -54,7 +47,6 @@ class FaroMiniClusterTest {
 
     static final ConcurrentLinkedQueue<CaptureEvent> CAPTURED = new ConcurrentLinkedQueue<>();
 
-    /** Singleton factory. Serializable because it is a named static class with no state. */
     static final CaptureEventSinkFactory COLLECTING_FACTORY = new CollectingFactory();
 
     private static final String PIPELINE_ID = "e2e-test-pipeline";

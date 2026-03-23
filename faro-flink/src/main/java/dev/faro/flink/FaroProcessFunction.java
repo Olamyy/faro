@@ -14,7 +14,7 @@ import org.apache.flink.util.Collector;
 public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT> {
 
     private final ProcessFunction<IN, OUT> delegate;
-    private final FaroProcessFunctionBase<IN, OUT> base;
+    private final FaroProcessFunctionBase base;
 
     FaroProcessFunction(
             CaptureEvent.OperatorType operatorType,
@@ -22,7 +22,7 @@ public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT>
             ProcessFunction<IN, OUT> delegate,
             CaptureEventSinkFactory captureEventSinkFactory) {
         this.delegate = delegate;
-        this.base = new FaroProcessFunctionBase<>(operatorType, config, captureEventSinkFactory, this);
+        this.base = new FaroProcessFunctionBase(operatorType, config, captureEventSinkFactory, this);
     }
 
     @Override

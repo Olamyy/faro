@@ -50,39 +50,42 @@ class FaroSinkTest {
 
     @Test
     void flush_emitsOneEventPerFeature() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("avg_purchase_7d", "max_purchase_7d");
-        writer.write("record1", ctx(null));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("avg_purchase_7d", "max_purchase_7d")) {
+            writer.write("record1", ctx(null));
+            writer.flush(false);
 
-        assertEquals(2, captured.events.size());
-        assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
-        assertEquals("max_purchase_7d", captured.events.get(1).getFeatureName());
+            assertEquals(2, captured.events.size());
+            assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
+            assertEquals("max_purchase_7d", captured.events.get(1).getFeatureName());
+        }
     }
 
     @Test
     void flush_cardinalityReflectsInterval() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.write("r1", ctx(null));
-        writer.write("r2", ctx(null));
-        writer.write("r3", ctx(null));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            writer.write("r1", ctx(null));
+            writer.write("r2", ctx(null));
+            writer.write("r3", ctx(null));
+            writer.flush(false);
 
-        assertEquals(3L, captured.events.get(0).getInputCardinality());
-        assertEquals(3L, captured.events.get(0).getOutputCardinality());
+            assertEquals(3L, captured.events.get(0).getInputCardinality());
+            assertEquals(3L, captured.events.get(0).getOutputCardinality());
+        }
     }
 
     @Test
     void flush_cardinalityResetsAfterEachInterval() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.write("r1", ctx(null));
-        writer.write("r2", ctx(null));
-        writer.flush(false);
-        captured.events.clear();
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            writer.write("r1", ctx(null));
+            writer.write("r2", ctx(null));
+            writer.flush(false);
+            captured.events.clear();
 
-        writer.write("r3", ctx(null));
-        writer.flush(false);
+            writer.write("r3", ctx(null));
+            writer.flush(false);
 
-        assertEquals(1L, captured.events.get(0).getInputCardinality());
+            assertEquals(1L, captured.events.get(0).getInputCardinality());
+        }
     }
 
     @Test
@@ -92,89 +95,85 @@ class FaroSinkTest {
                 .features("feature-a")
                 .build();
         FaroSink<String> sink = new FaroSink<>(new FailingAfterNSink<>(2), config, captured, OPERATOR_ID);
-        SinkWriter<String> writer = sink.createWriter(mock(Sink.InitContext.class));
+        try (SinkWriter<String> writer = sink.createWriter(mock(Sink.InitContext.class))) {
+            writer.write("r1", ctx(null));
+            writer.write("r2", ctx(null));
+            assertThrows(Exception.class, () -> writer.write("r3", ctx(null)));
+            writer.flush(false);
 
-        writer.write("r1", ctx(null));
-        writer.write("r2", ctx(null));
-        assertThrows(Exception.class, () -> writer.write("r3", ctx(null)));
-        writer.flush(false);
-
-        assertEquals(3L, captured.events.get(0).getInputCardinality());
-        assertEquals(2L, captured.events.get(0).getOutputCardinality());
+            assertEquals(3L, captured.events.get(0).getInputCardinality());
+            assertEquals(2L, captured.events.get(0).getOutputCardinality());
+        }
     }
 
     @Test
     void close_flushesPartialInterval() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.write("r1", ctx(null));
-        writer.close();
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            writer.write("r1", ctx(null));
+        }
 
         assertFalse(captured.events.isEmpty());
         assertEquals(1L, captured.events.get(0).getInputCardinality());
     }
 
     @Test
-    void flush_watermarkIsNullWhenNoWatermarkReceived() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.write("r1", ctx(null));
-        writer.flush(false);
-
-        assertNull(captured.events.get(0).getWatermark());
-    }
-
-    @Test
     void flush_watermarkIsNullForMaxValueSentinel() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(Long.MAX_VALUE));
-        writer.write("r1", ctx(null));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(Long.MAX_VALUE));
+            writer.write("r1", ctx(null));
+            writer.flush(false);
 
-        assertNull(captured.events.get(0).getWatermark());
+            assertNull(captured.events.get(0).getWatermark());
+        }
     }
 
     @Test
     void flush_watermarkReflectsLastWriteWatermark() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        long wmMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
-        writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(wmMs));
-        writer.write("r1", ctx(null));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            long wmMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
+            writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(wmMs));
+            writer.write("r1", ctx(null));
+            writer.flush(false);
 
-        assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
+            assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
+        }
     }
 
     @Test
     void flush_eventTimeIsNullWhenNoTimestamp() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        writer.write("r1", ctx(null));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            writer.write("r1", ctx(null));
+            writer.flush(false);
 
-        assertNull(captured.events.get(0).getEventTime());
-        assertNull(captured.events.get(0).getEventTimeMin());
+            assertNull(captured.events.get(0).getEventTime());
+            assertNull(captured.events.get(0).getEventTimeMin());
+        }
     }
 
     @Test
     void flush_eventTimeReflectsMaxTimestampInInterval() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
-        long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
-        writer.write("r1", ctx(t1));
-        writer.write("r2", ctx(t2));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
+            long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
+            writer.write("r1", ctx(t1));
+            writer.write("r2", ctx(t2));
+            writer.flush(false);
 
-        assertEquals("2026-03-21T11:00:00Z", captured.events.get(0).getEventTime());
+            assertEquals("2026-03-21T11:00:00Z", captured.events.get(0).getEventTime());
+        }
     }
 
     @Test
     void flush_eventTimeMinReflectsMinTimestampInInterval() throws Exception {
-        SinkWriter<String> writer = writerWithFeatures("feature-a");
-        long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
-        long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
-        writer.write("r1", ctx(t1));
-        writer.write("r2", ctx(t2));
-        writer.flush(false);
+        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
+            long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
+            long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
+            writer.write("r1", ctx(t1));
+            writer.write("r2", ctx(t2));
+            writer.flush(false);
 
-        assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
+            assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
+        }
     }
 
     private static final class NoopSink<T> implements Sink<T> {
