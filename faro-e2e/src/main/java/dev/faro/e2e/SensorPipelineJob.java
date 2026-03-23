@@ -5,7 +5,7 @@ import dev.faro.flink.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
 import dev.faro.flink.FaroConfig;
 import dev.faro.flink.FaroSink;
-import dev.faro.flink.StdoutCaptureEventSink;
+import dev.faro.flink.KafkaCaptureEventSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
@@ -42,8 +42,10 @@ public final class SensorPipelineJob {
                 .features("temperature")
                 .build();
 
+        String bootstrapServers = System.getenv().getOrDefault("KAFKA_BOOTSTRAP", "redpanda:29092");
+        CaptureEventSinkFactory kafkaFactory = KafkaCaptureEventSink.factory(bootstrapServers);
         CaptureEventSinkFactory sinkFactory =
-                () -> new AsyncCaptureEventSink(new StdoutCaptureEventSink(), 1_000);
+                () -> new AsyncCaptureEventSink(kafkaFactory.create(), 1_000);
         Faro faro = new Faro(config, sinkFactory);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();

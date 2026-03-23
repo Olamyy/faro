@@ -151,7 +151,7 @@ class FaroSinkTest {
     }
 
     @Test
-    void flush_eventTimeReflectsMaxTimestampInInterval() throws Exception {
+    void flush_eventTimeReflectsMaxAndMinTimestampInInterval() throws Exception {
         try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
             long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
             long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
@@ -160,18 +160,6 @@ class FaroSinkTest {
             writer.flush(false);
 
             assertEquals("2026-03-21T11:00:00Z", captured.events.get(0).getEventTime());
-        }
-    }
-
-    @Test
-    void flush_eventTimeMinReflectsMinTimestampInInterval() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
-            long t2 = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
-            writer.write("r1", ctx(t1));
-            writer.write("r2", ctx(t2));
-            writer.flush(false);
-
             assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
         }
     }
