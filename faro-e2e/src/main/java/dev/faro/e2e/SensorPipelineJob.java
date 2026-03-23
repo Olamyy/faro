@@ -1,9 +1,11 @@
 package dev.faro.e2e;
 
+import dev.faro.flink.AsyncCaptureEventSink;
+import dev.faro.flink.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
 import dev.faro.flink.FaroConfig;
 import dev.faro.flink.FaroSink;
-import dev.faro.flink.StdoutCaptureEventSink;
+import dev.faro.flink.KafkaCaptureEventSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
@@ -40,8 +42,11 @@ public final class SensorPipelineJob {
                 .features("temperature")
                 .build();
 
-        StdoutCaptureEventSink sink = new StdoutCaptureEventSink();
-        Faro faro = new Faro(config, sink);
+        String bootstrapServers = System.getenv().getOrDefault("KAFKA_BOOTSTRAP", "redpanda:29092");
+        CaptureEventSinkFactory kafkaFactory = KafkaCaptureEventSink.factory(bootstrapServers);
+        CaptureEventSinkFactory sinkFactory =
+                () -> new AsyncCaptureEventSink(kafkaFactory.create(), 1_000);
+        Faro faro = new Faro(config, sinkFactory);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -71,7 +76,7 @@ public final class SensorPipelineJob {
                 .process(faro.windowTrace(new TemperatureSumFn()))
                 .returns(TypeInformation.of(SensorReading.class))
                 .uid("window.temperature-sum")
-                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), config, sink, "sink.file"))
+                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), config, sinkFactory, "sink.file"))
                 .uid("sink.file");
 
         env.execute("sensor-pipeline-e2e");

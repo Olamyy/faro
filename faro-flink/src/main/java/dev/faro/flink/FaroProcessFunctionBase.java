@@ -26,11 +26,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>A stable operator UID must be set via {@code operator.uid("...")}. {@link #open} throws
  * {@link IllegalStateException} if the UID is absent or empty.
  *
- * <p>{@code event_time} in emitted events reflects the maximum context timestamp seen within
- * the flush interval; {@code event_time_min} reflects the minimum. Both are {@code null} when
- * no records with a non-{@code Long.MIN_VALUE} timestamp arrived in the interval.
+ * <p>{@code event_time} reflects the maximum context timestamp seen within the flush interval;
+ * {@code event_time_min} the minimum. Both are {@code null} when no non-{@code Long.MIN_VALUE}
+ * timestamp arrived in the interval.
  */
-class FaroProcessFunctionBase<IN, OUT> implements Serializable {
+class FaroProcessFunctionBase implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -159,6 +159,7 @@ class FaroProcessFunctionBase<IN, OUT> implements Serializable {
         String spanId = newSpanId();
         String eventTime = maxEventTimeMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(maxEventTimeMs).toString();
         String eventTimeMin = minEventTimeMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(minEventTimeMs).toString();
+        boolean dropped = sink.droppedSinceLastFlush();
 
         for (String featureName : config.getFeatureNames()) {
             sink.emit(CaptureEvent.builder()
@@ -177,7 +178,7 @@ class FaroProcessFunctionBase<IN, OUT> implements Serializable {
                     .eventTime(eventTime)
                     .eventTimeMin(eventTimeMin)
                     .timerFiredCount(timerFiredCount)
-                    .captureDropSinceLast(false)
+                    .captureDropSinceLast(dropped)
                     .build());
         }
     }

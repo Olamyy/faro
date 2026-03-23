@@ -10,23 +10,14 @@ import org.apache.flink.util.OutputTag;
 import java.util.Objects;
 
 /**
- * Entry point for Faro instrumentation.
- *
- * <p>Create one instance per pipeline, then call the {@code trace()} methods inline:
+ * Entry point for Faro instrumentation. Create one instance per pipeline:
  * <pre>{@code
  * Faro faro = new Faro(config, sink);
  *
- * stream.process(faro.trace(OperatorType.MAP, myFn))
- *       .uid("my-op");
- *
- * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn))
- *            .uid("my-keyed-op");
- *
- * windowedStream.process(faro.windowTrace(myWindowFn))
- *               .uid("my-window-op");
- *
- * windowedStream.process(faro.windowTrace(myWindowFn, lateDataTag))
- *               .uid("my-window-op");
+ * stream.process(faro.trace(OperatorType.MAP, myFn)).uid("my-op");
+ * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn)).uid("my-keyed-op");
+ * windowedStream.process(faro.windowTrace(myWindowFn)).uid("my-window-op");
+ * windowedStream.process(faro.windowTrace(myWindowFn, lateDataTag)).uid("my-window-op");
  * }</pre>
  */
 public final class Faro {

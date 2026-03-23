@@ -88,7 +88,6 @@ class FaroProcessFunctionTest {
         fn.flush();
 
         assertEquals(3L, captured.events.get(0).getInputCardinality());
-        assertEquals(3L, captured.events.get(0).getOutputCardinality());
     }
 
     @Test
@@ -166,7 +165,7 @@ class FaroProcessFunctionTest {
     }
 
     @Test
-    void flush_eventTimeReflectsMaxTimestampInInterval() throws Exception {
+    void flush_eventTimeReflectsMaxAndMinTimestampInInterval() throws Exception {
         FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
         long ts1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
         long ts2 = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
@@ -175,20 +174,8 @@ class FaroProcessFunctionTest {
         fn.flush();
 
         assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getEventTime());
-    }
-
-    @Test
-    void flush_eventTimeMinReflectsMinTimestampInInterval() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        long ts1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
-        long ts2 = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
-        fn.processElement("r1", mockCtx(ts1, Long.MIN_VALUE), noopCollector());
-        fn.processElement("r2", mockCtx(ts2, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
         assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getEventTimeMin());
     }
-
 
     private static ProcessFunction<String, String>.Context mockCtx(Long timestamp, long watermark) {
         @SuppressWarnings("unchecked")

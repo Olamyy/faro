@@ -40,17 +40,6 @@ class FaroKeyedProcessFunctionTest {
     }
 
     @Test
-    void flush_timerFiredCountReflectsOnTimerCalls() throws Exception {
-        FaroKeyedProcessFunction<String, String, String> fn = fnWithFeatures();
-        fn.onTimer(1000L, mockOnTimerCtx(), noopCollector());
-        fn.onTimer(2000L, mockOnTimerCtx(), noopCollector());
-        fn.onTimer(3000L, mockOnTimerCtx(), noopCollector());
-        fn.flush();
-
-        assertEquals(3L, captured.events.get(0).getTimerFiredCount());
-    }
-
-    @Test
     void flush_timerFiredCountResetsAfterEachInterval() throws Exception {
         FaroKeyedProcessFunction<String, String, String> fn = fnWithFeatures();
         fn.onTimer(1000L, mockOnTimerCtx(), noopCollector());

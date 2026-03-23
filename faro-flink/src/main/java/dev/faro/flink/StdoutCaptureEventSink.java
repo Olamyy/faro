@@ -5,9 +5,8 @@ import dev.faro.core.CaptureEvent;
 import java.io.Serial;
 
 /**
- * {@link CaptureEventSink} that prints each event as JSON to stdout.
- *
- * <p>Intended for local development and smoke-testing. Not suitable for production.
+ * {@link CaptureEventSink} that prints each event as JSON to stdout. Intended for local
+ * development and smoke-testing.
  */
 public final class StdoutCaptureEventSink implements CaptureEventSink, CaptureEventSinkFactory {
 

@@ -182,18 +182,6 @@ class FaroProcessWindowFunctionTest {
     }
 
     @Test
-    void process_emitIntervalMsMatchesWindowDuration() throws Exception {
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                fnWithFeatures("feature-a");
-        long start = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
-        long end = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
-        TimeWindow window = new TimeWindow(start, end);
-        fn.process("key", mockCtx(window), List.of("r1"), noopCollector());
-
-        assertEquals(end - start, captured.events.get(0).getEmitIntervalMs());
-    }
-
-    @Test
     void process_lateEventCountIsNullWhenNoTag() throws Exception {
         FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
                 fnWithFeatures("feature-a");

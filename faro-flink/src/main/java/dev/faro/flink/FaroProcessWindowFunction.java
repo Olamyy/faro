@@ -115,6 +115,7 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         String processingTime = Instant.ofEpochMilli(ctx.currentProcessingTime()).toString();
         String spanId = FaroProcessFunctionBase.newSpanId();
         List<String> features = config.getFeatureNames();
+        boolean dropped = captureEventSink.droppedSinceLastFlush();
 
         for (String featureName : features) {
             CaptureEvent event = CaptureEvent.builder()
@@ -136,7 +137,7 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
                     .eventTimeMin(eventTimeMin)
                     .traceId(traceId)
                     .spanId(spanId)
-                    .captureDropSinceLast(false)
+                    .captureDropSinceLast(dropped)
                     .build();
 
             captureEventSink.emit(event);
