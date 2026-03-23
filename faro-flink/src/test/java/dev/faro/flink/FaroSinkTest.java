@@ -195,34 +195,29 @@ class FaroSinkTest {
         }
     }
 
-    private static final class FailingAfterNSink<T> implements Sink<T> {
-        private final int succeedCount;
-
-        FailingAfterNSink(int succeedCount) {
-            this.succeedCount = succeedCount;
-        }
+    private record FailingAfterNSink<T>(int succeedCount) implements Sink<T> {
 
         @Override
-        public SinkWriter<T> createWriter(InitContext context) {
-            return new SinkWriter<>() {
-                private int invocations = 0;
+            public SinkWriter<T> createWriter(InitContext context) {
+                return new SinkWriter<>() {
+                    private int invocations = 0;
 
-                @Override
-                public void write(T element, Context context) {
-                    invocations++;
-                    if (invocations > succeedCount) {
-                        throw new RuntimeException("simulated write failure");
+                    @Override
+                    public void write(T element, Context context) {
+                        invocations++;
+                        if (invocations > succeedCount) {
+                            throw new RuntimeException("simulated write failure");
+                        }
                     }
-                }
 
-                @Override
-                public void flush(boolean endOfInput) {
-                }
+                    @Override
+                    public void flush(boolean endOfInput) {
+                    }
 
-                @Override
-                public void close() {
-                }
-            };
+                    @Override
+                    public void close() {
+                    }
+                };
+            }
         }
-    }
 }
