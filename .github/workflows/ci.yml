@@ -22,25 +22,6 @@ jobs:
       - name: Build and test
         run: ./gradlew test
 
-  python-cli:
-    name: Python CLI (faro-cli)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: faro-cli
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install hatch
-        run: pip install hatch
-
-      - name: Test
-        run: hatch run pytest
-
   python-api:
     name: Python API (faro-api)
     runs-on: ubuntu-latest
@@ -50,12 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.11'
 
-      - name: Install hatch
-        run: pip install hatch
-
       - name: Test
-        run: hatch run pytest
+        run: uv run --extra dev pytest

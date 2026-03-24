@@ -41,8 +41,12 @@ final class SensorPipeline {
     private SensorPipeline() {}
 
     static void execute(CaptureEventSinkFactory innerFactory, String jobName) throws Exception {
+        execute(innerFactory, jobName, "sensor-pipeline-e2e");
+    }
+
+    static void execute(CaptureEventSinkFactory innerFactory, String jobName, String pipelineId) throws Exception {
         FaroConfig config = FaroConfig.builder()
-                .pipelineId("sensor-pipeline-e2e")
+                .pipelineId(pipelineId)
                 .features("temperature")
                 .build();
 
