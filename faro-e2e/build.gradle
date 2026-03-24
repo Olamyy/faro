@@ -7,6 +7,12 @@ ext {
     flinkVersion = '1.18.0'
 }
 
+configurations.configureEach {
+    resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+        selectHighestVersion()
+    }
+}
+
 dependencies {
     implementation project(':faro-flink')
 
@@ -22,7 +28,7 @@ shadowJar {
     archiveVersion = ''
 
     manifest {
-        attributes 'Main-Class': 'dev.faro.e2e.SensorPipelineJob'
+        attributes 'Main-Class': 'dev.faro.e2e.StdoutSensorJob'
     }
 
     mergeServiceFiles()
