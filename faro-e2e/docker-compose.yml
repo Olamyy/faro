@@ -50,6 +50,18 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
 
+  faro-api:
+    build:
+      context: ../faro-api
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    environment:
+      - FARO_STORAGE_BACKEND=local
+      - FARO_LOCAL_PATH=/var/faro/parquet
+    volumes:
+      - faro-parquet:/var/faro/parquet
+
   jobmanager:
     image: flink:1.18-java17
     ports:
@@ -65,6 +77,7 @@ services:
     depends_on:
       - jobmanager
       - redpanda
+      - faro-api
     command: taskmanager
     environment:
       - |
@@ -73,3 +86,6 @@ services:
         taskmanager.numberOfTaskSlots: 4
     volumes:
       - ./output:/tmp
+
+volumes:
+  faro-parquet:
