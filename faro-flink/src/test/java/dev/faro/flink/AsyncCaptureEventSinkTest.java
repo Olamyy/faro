@@ -151,11 +151,7 @@ class AsyncCaptureEventSinkTest {
         }
         byte[] bytes = baos.toByteArray();
         try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
-            CaptureEventSinkFactory deserialized = (CaptureEventSinkFactory) ois.readObject();
-            assertNotNull(deserialized);
-            CaptureEventSink created = deserialized.create();
-            assertNotNull(created);
-            created.close();
+            ((CaptureEventSinkFactory) ois.readObject()).create().close();
         }
     }
 

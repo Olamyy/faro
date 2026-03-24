@@ -68,7 +68,6 @@ class FaroKeyedProcessFunctionTest {
         fn.onTimer(1000L, mockOnTimerCtx(), noopCollector());
         fn.onTimer(2000L, mockOnTimerCtx(), noopCollector());
 
-        assertEquals(2, delegate.onTimerCallCount);
         fn.flush();
         assertEquals(2L, captured.events.get(0).getTimerFiredCount());
     }

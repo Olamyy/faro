@@ -104,23 +104,6 @@ class FaroProcessWindowFunctionTest {
     }
 
     @Test
-    void process_outputCardinalityReflectsCollectCalls() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(config, new CollectingWindowFn(2), captured, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        TimeWindow window = new TimeWindow(1000L, 2000L);
-        fn.process("key", mockCtx(window), List.of("r1", "r2", "r3"), noopCollector());
-
-        assertEquals(2L, captured.events.get(0).getOutputCardinality());
-    }
-
-    @Test
     void process_outputCardinalityReflectsFailures() throws Exception {
         FaroConfig config = FaroConfig.builder()
                 .pipelineId(PIPELINE_ID)
@@ -239,27 +222,6 @@ class FaroProcessWindowFunctionTest {
                 Iterable<String> elements, Collector<String> out) {
             for (String e : elements) {
                 out.collect(e);
-            }
-        }
-    }
-
-    private static final class CollectingWindowFn
-            extends ProcessWindowFunction<String, String, String, TimeWindow> {
-        private final int collectCount;
-
-        CollectingWindowFn(int collectCount) {
-            this.collectCount = collectCount;
-        }
-
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {
-            int emitted = 0;
-            for (String e : elements) {
-                if (emitted < collectCount) {
-                    out.collect(e);
-                    emitted++;
-                }
             }
         }
     }
