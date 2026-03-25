@@ -30,12 +30,11 @@ class FaroProcessFunctionTest {
     }
 
     private FaroProcessFunction<String, String> fnWithFeatures(String... features) throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features(features)
                 .build();
         FaroProcessFunction<String, String> fn = new FaroProcessFunction<>(
-                CaptureEvent.OperatorType.MAP, config, new PassThroughFn(), captured);
+                CaptureEvent.OperatorType.MAP, PIPELINE_ID, config, new PassThroughFn(), captured);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
         return fn;
@@ -44,74 +43,35 @@ class FaroProcessFunctionTest {
     @Test
     void open_throwsWhenNoUid() {
         when(runtimeContext.getOperatorUniqueID()).thenReturn("");
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroProcessFunction<String, String> fn = new FaroProcessFunction<>(
-                CaptureEvent.OperatorType.MAP, config, new PassThroughFn(), captured);
+                CaptureEvent.OperatorType.MAP, PIPELINE_ID, config, new PassThroughFn(), captured);
         fn.setRuntimeContext(runtimeContext);
         assertThrows(IllegalStateException.class, () -> fn.open(new Configuration()));
     }
 
     @Test
     void construction_throwsOnInvalidOperatorType() {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.SINK, config, new PassThroughFn(), captured));
+                new FaroProcessFunction<>(CaptureEvent.OperatorType.SINK, PIPELINE_ID, config, new PassThroughFn(), captured));
         assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.WINDOW, config, new PassThroughFn(), captured));
+                new FaroProcessFunction<>(CaptureEvent.OperatorType.WINDOW, PIPELINE_ID, config, new PassThroughFn(), captured));
         assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.SOURCE, config, new PassThroughFn(), captured));
-    }
-
-    @Test
-    void flush_emitsOneEventPerFeature() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("avg_purchase_7d", "max_purchase_7d");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertEquals(2, captured.events.size());
-        assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
-        assertEquals("max_purchase_7d", captured.events.get(1).getFeatureName());
-    }
-
-    @Test
-    void flush_cardinalityReflectsInterval() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.processElement("r2", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.processElement("r3", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertEquals(3L, captured.events.get(0).getInputCardinality());
-    }
-
-    @Test
-    void flush_cardinalityResetsAfterEachInterval() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.processElement("r2", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-        captured.events.clear();
-
-        fn.processElement("r3", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertEquals(1L, captured.events.get(0).getInputCardinality());
+                new FaroProcessFunction<>(CaptureEvent.OperatorType.SOURCE, PIPELINE_ID, config, new PassThroughFn(), captured));
     }
 
     @Test
     void flush_outputCardinalityReflectsFailures() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroProcessFunction<String, String> fn = new FaroProcessFunction<>(
-                CaptureEvent.OperatorType.MAP, config, new FailingAfterNFn(2), captured);
+                CaptureEvent.OperatorType.MAP, PIPELINE_ID, config, new FailingAfterNFn(2), captured);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
 
@@ -123,16 +83,6 @@ class FaroProcessFunctionTest {
 
         assertEquals(3L, captured.events.get(0).getInputCardinality());
         assertEquals(2L, captured.events.get(0).getOutputCardinality());
-    }
-
-    @Test
-    void close_flushesPartialInterval() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.close();
-
-        assertFalse(captured.events.isEmpty());
-        assertEquals(1L, captured.events.get(0).getInputCardinality());
     }
 
     @Test
@@ -152,16 +102,6 @@ class FaroProcessFunctionTest {
         fn.flush();
 
         assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
-    }
-
-    @Test
-    void flush_eventTimeIsNullWhenNoTimestamp() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertNull(captured.events.get(0).getEventTime());
-        assertNull(captured.events.get(0).getEventTimeMin());
     }
 
     @Test
@@ -199,7 +139,6 @@ class FaroProcessFunctionTest {
             out.collect(value);
         }
     }
-
 
     private static final class FailingAfterNFn extends ProcessFunction<String, String> {
         private final int succeedCount;

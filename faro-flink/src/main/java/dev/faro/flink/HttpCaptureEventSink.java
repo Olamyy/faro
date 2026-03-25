@@ -59,9 +59,7 @@ public final class HttpCaptureEventSink implements CaptureEventSink {
     }
 
     /**
-     * Returns a serializable factory for {@code HttpCaptureEventSink}.
-     *
-     * <p>Default timeouts are 5 s connect and 10 s read. Override via
+     * Default timeouts are 5 s connect and 10 s read. Override via
      * {@link #factory(String, Duration, Duration)}.
      */
     public static CaptureEventSinkFactory factory(String url) {

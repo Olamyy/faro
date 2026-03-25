@@ -58,20 +58,19 @@ class FaroMiniClusterTest {
 
     @Test
     void statelessPipeline_captureEventsEmittedFromBothOperators() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(config, COLLECTING_FACTORY);
+        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
 
         env.fromElements("r1", "r2", "r3")
-                .process(faro.trace(CaptureEvent.OperatorType.MAP, new PassThroughFn()))
+                .process(faro.trace(CaptureEvent.OperatorType.MAP, new PassThroughFn(), config))
                 .returns(String.class)
                 .uid("map.passthrough")
-                .sinkTo(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY, "sink.noop"))
+                .sinkTo(new FaroSink<>(new NoopSink<>(), PIPELINE_ID, config, COLLECTING_FACTORY, "sink.noop"))
                 .uid("sink.noop");
 
         env.execute("stateless-pipeline");
@@ -85,8 +84,7 @@ class FaroMiniClusterTest {
 
     @Test
     void statelessPipeline_inputCardinalityReflectsRecordCount() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
 
@@ -94,7 +92,7 @@ class FaroMiniClusterTest {
         env.setParallelism(1);
 
         env.fromElements("r1", "r2", "r3")
-                .sinkTo(new FaroSink<>(new NoopSink<>(), config, COLLECTING_FACTORY, "sink.cardinality"))
+                .sinkTo(new FaroSink<>(new NoopSink<>(), PIPELINE_ID, config, COLLECTING_FACTORY, "sink.cardinality"))
                 .uid("sink.cardinality");
 
         env.execute("cardinality-pipeline");
@@ -105,18 +103,17 @@ class FaroMiniClusterTest {
 
     @Test
     void keyedPipeline_captureEventsEmittedWithCorrectPipelineId() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(config, COLLECTING_FACTORY);
+        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
 
         env.fromElements("a", "b", "a", "c")
                 .keyBy(s -> s)
-                .process(faro.keyedTrace(CaptureEvent.OperatorType.AGG, new PassThroughKeyedFn()))
+                .process(faro.keyedTrace(CaptureEvent.OperatorType.AGG, new PassThroughKeyedFn(), config))
                 .returns(String.class)
                 .uid("keyed.agg")
                 .sinkTo(new NoopSink<>());
@@ -131,11 +128,10 @@ class FaroMiniClusterTest {
 
     @Test
     void windowedPipeline_windowBoundsAndCardinalityPopulated() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<TimestampedEvent> config = FaroConfig.<TimestampedEvent>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(config, COLLECTING_FACTORY);
+        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -152,7 +148,7 @@ class FaroMiniClusterTest {
                                 .withTimestampAssigner((e, ts) -> e.timestamp))
                 .keyBy(e -> e.key)
                 .window(TumblingEventTimeWindows.of(Time.seconds(5)))
-                .process(faro.windowTrace(new PassThroughWindowFn()))
+                .process(faro.windowTrace(new PassThroughWindowFn(), config))
                 .returns(TypeInformation.of(TimestampedEvent.class))
                 .uid("window.tumbling")
                 .sinkTo(new NoopSink<>());

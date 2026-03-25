@@ -18,11 +18,12 @@ public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT>
 
     FaroProcessFunction(
             CaptureEvent.OperatorType operatorType,
-            FaroConfig config,
+            String pipelineId,
+            FaroConfig<IN> config,
             ProcessFunction<IN, OUT> delegate,
             CaptureEventSinkFactory captureEventSinkFactory) {
         this.delegate = delegate;
-        this.base = new FaroProcessFunctionBase(operatorType, config, captureEventSinkFactory, this);
+        this.base = new FaroProcessFunctionBase(operatorType, pipelineId, config, captureEventSinkFactory, this);
     }
 
     @Override
@@ -33,7 +34,7 @@ public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT>
 
     @Override
     public void processElement(IN value, Context ctx, Collector<OUT> out) throws Exception {
-        base.processElement(ctx.timestamp(), ctx.timerService(), () -> delegate.processElement(value, ctx, out));
+        base.processElement(value, ctx.timestamp(), ctx.timerService(), () -> delegate.processElement(value, ctx, out));
     }
 
     @Override

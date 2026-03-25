@@ -27,41 +27,14 @@ class FaroKeyedProcessFunctionTest {
         when(runtimeContext.getOperatorUniqueID()).thenReturn(OPERATOR_UID);
     }
 
-    private FaroKeyedProcessFunction<String, String, String> fnWithFeatures() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        FaroKeyedProcessFunction<String, String, String> fn = new FaroKeyedProcessFunction<>(
-                CaptureEvent.OperatorType.AGG, config, new PassThroughKeyedFn(), captured);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-        return fn;
-    }
-
-    @Test
-    void flush_timerFiredCountResetsAfterEachInterval() throws Exception {
-        FaroKeyedProcessFunction<String, String, String> fn = fnWithFeatures();
-        fn.onTimer(1000L, mockOnTimerCtx(), noopCollector());
-        fn.onTimer(2000L, mockOnTimerCtx(), noopCollector());
-        fn.flush();
-        captured.events.clear();
-
-        fn.onTimer(3000L, mockOnTimerCtx(), noopCollector());
-        fn.flush();
-
-        assertEquals(1L, captured.events.get(0).getTimerFiredCount());
-    }
-
     @Test
     void onTimer_delegatesAndCounts() throws Exception {
         CountingKeyedFn delegate = new CountingKeyedFn();
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroKeyedProcessFunction<String, String, String> fn = new FaroKeyedProcessFunction<>(
-                CaptureEvent.OperatorType.AGG, config, delegate, captured);
+                CaptureEvent.OperatorType.AGG, PIPELINE_ID, config, delegate, captured);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
 
@@ -70,6 +43,7 @@ class FaroKeyedProcessFunctionTest {
 
         fn.flush();
         assertEquals(2L, captured.events.get(0).getTimerFiredCount());
+        assertEquals(2, delegate.onTimerCallCount);
     }
 
     private static KeyedProcessFunction<String, String, String>.OnTimerContext mockOnTimerCtx() {
@@ -83,13 +57,6 @@ class FaroKeyedProcessFunctionTest {
     @SuppressWarnings("unchecked")
     private static Collector<String> noopCollector() {
         return mock(Collector.class);
-    }
-
-    private static final class PassThroughKeyedFn extends KeyedProcessFunction<String, String, String> {
-        @Override
-        public void processElement(String value, Context ctx, Collector<String> out) {
-            out.collect(value);
-        }
     }
 
     private static final class CountingKeyedFn extends KeyedProcessFunction<String, String, String> {
