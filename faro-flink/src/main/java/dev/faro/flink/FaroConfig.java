@@ -1,65 +1,69 @@
 package dev.faro.flink;
 
 import java.io.Serializable;
-import java.util.List;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Per-pipeline configuration for Faro instrumentation.
+ * Per-operator configuration for Faro instrumentation.
  *
- * <p>Infrastructure concerns (where to send events) belong in {@link CaptureEventSink}
- * implementations. {@code pipelineId} and at least one feature name are required.
+ * <p>Use {@link #builder()} to construct. Two distinct registration methods exist:
+ * <ul>
+ *   <li>{@code .features(String...)} — registers features in AGGREGATE mode only. No entity
+ *       capture occurs; one event per feature per flush interval is emitted.</li>
+ *   <li>{@code .feature(String, FaroFeatureConfig)} — registers a feature in ENTITY mode.
+ *       One event per entity per feature per flush interval is emitted, subject to
+ *       {@link FaroFeatureConfig#getSampleRate()} and classification-based suppression.</li>
+ * </ul>
+ *
+ * <p>{@code pipelineId} is not part of this config — it is held by the {@link Faro} instance
+ * and injected at emit time.
+ *
+ * <p>The internal map value is nullable: {@code null} means AGGREGATE mode for that feature;
+ * a non-null {@link FaroFeatureConfig} means ENTITY mode.
+ *
+ * @param <IN> the record type flowing through the instrumented operator
  */
-public final class FaroConfig implements Serializable {
+public final class FaroConfig<IN> implements Serializable {
 
-    private final String pipelineId;
-    private final List<String> featureNames;
+    private final Map<String, FaroFeatureConfig<IN>> features;
 
-    private FaroConfig(String pipelineId, List<String> featureNames) {
-        this.pipelineId = pipelineId;
-        this.featureNames = List.copyOf(featureNames);
+    private FaroConfig(Map<String, FaroFeatureConfig<IN>> features) {
+        this.features = Collections.unmodifiableMap(features);
     }
 
-    public String getPipelineId() {
-        return pipelineId;
+    public Map<String, FaroFeatureConfig<IN>> getFeatures() {
+        return features;
     }
 
-    public List<String> getFeatureNames() {
-        return featureNames;
+    public static <IN> Builder<IN> builder() {
+        return new Builder<>();
     }
 
-    public static Builder builder() {
-        return new Builder();
-    }
+    public static final class Builder<IN> {
 
-    public static final class Builder {
-
-        private String pipelineId;
-        private List<String> featureNames;
+        private final Map<String, FaroFeatureConfig<IN>> features = new LinkedHashMap<>();
 
         private Builder() {}
 
-        public Builder pipelineId(String v) {
-            this.pipelineId = v;
+        public Builder<IN> features(String... names) {
+            for (String name : names) {
+                features.put(name, null);
+            }
             return this;
         }
 
-        public Builder features(List<String> v) {
-            this.featureNames = v;
+        public Builder<IN> feature(String name, FaroFeatureConfig<IN> config) {
+            features.put(name, config);
             return this;
         }
 
-        public Builder features(String... v) {
-            return features(List.of(v));
-        }
-
-        public FaroConfig build() {
-            if (pipelineId == null || pipelineId.isEmpty()) {
-                throw new IllegalStateException("FaroConfig: pipelineId must not be null or empty");
+        public FaroConfig<IN> build() {
+            if (features.isEmpty()) {
+                throw new IllegalStateException("FaroConfig: at least one feature is required");
             }
-            if (featureNames == null || featureNames.isEmpty()) {
-                throw new IllegalStateException("FaroConfig: at least one feature name is required");
-            }
-            return new FaroConfig(pipelineId, featureNames);
+            return new FaroConfig<>(new LinkedHashMap<>(features));
         }
     }
 }

@@ -13,6 +13,7 @@ import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Faro observability decorator for Flink {@link ProcessWindowFunction}.
@@ -30,6 +31,8 @@ import java.util.List;
 public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         extends ProcessWindowFunction<IN, OUT, KEY, W> {
 
+    private final String pipelineId;
+    @SuppressWarnings("rawtypes")
     private final FaroConfig config;
     private final ProcessWindowFunction<IN, OUT, KEY, W> delegate;
     private final CaptureEventSinkFactory captureEventSinkFactory;
@@ -39,11 +42,14 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
     private transient String operatorId;
     private transient String traceId;
 
+    @SuppressWarnings("rawtypes")
     FaroProcessWindowFunction(
+            String pipelineId,
             FaroConfig config,
             ProcessWindowFunction<IN, OUT, KEY, W> delegate,
             CaptureEventSinkFactory captureEventSinkFactory,
             OutputTag<IN> lateDataTag) {
+        this.pipelineId = pipelineId;
         this.config = config;
         this.delegate = delegate;
         this.captureEventSinkFactory = captureEventSinkFactory;
@@ -57,7 +63,7 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
         String uid = rtc.getOperatorUniqueID();
         if (uid == null || uid.isEmpty()) {
             throw new IllegalStateException(
-                    "Faro window function on pipeline '" + config.getPipelineId()
+                    "Faro window function on pipeline '" + pipelineId
                     + "' has no stable operator UID. "
                     + "Call .uid(\"your-stable-id\") on the operator in your pipeline definition. "
                     + "Without a stable UID, lineage correlation will break across restarts.");
@@ -114,12 +120,11 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
 
         String processingTime = Instant.ofEpochMilli(ctx.currentProcessingTime()).toString();
         String spanId = FaroProcessFunctionBase.newSpanId();
-        List<String> features = config.getFeatureNames();
         boolean dropped = captureEventSink.droppedSinceLastFlush();
 
-        for (String featureName : features) {
+        for (String featureName : ((Map<String, ?>) config.getFeatures()).keySet()) {
             CaptureEvent event = CaptureEvent.builder()
-                    .pipelineId(config.getPipelineId())
+                    .pipelineId(pipelineId)
                     .operatorId(operatorId)
                     .operatorType(CaptureEvent.OperatorType.WINDOW)
                     .captureMode(CaptureEvent.CaptureMode.AGGREGATE)

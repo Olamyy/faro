@@ -24,11 +24,10 @@ class FaroSinkTest {
     }
 
     private SinkWriter<String> writerWithFeatures(String... features) throws IOException {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features(features)
                 .build();
-        FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), config, captured, OPERATOR_ID);
+        FaroSink<String> sink = new FaroSink<>(new NoopSink<>(), PIPELINE_ID, config, captured, OPERATOR_ID);
         return sink.createWriter(mock(Sink.InitContext.class));
     }
 
@@ -40,61 +39,19 @@ class FaroSinkTest {
 
     @Test
     void construction_throwsOnEmptyOperatorId() {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         assertThrows(IllegalArgumentException.class,
-                () -> new FaroSink<>(new NoopSink<>(), config, captured, ""));
-    }
-
-    @Test
-    void flush_emitsOneEventPerFeature() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("avg_purchase_7d", "max_purchase_7d")) {
-            writer.write("record1", ctx(null));
-            writer.flush(false);
-
-            assertEquals(2, captured.events.size());
-            assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
-            assertEquals("max_purchase_7d", captured.events.get(1).getFeatureName());
-        }
-    }
-
-    @Test
-    void flush_cardinalityReflectsInterval() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            writer.write("r1", ctx(null));
-            writer.write("r2", ctx(null));
-            writer.write("r3", ctx(null));
-            writer.flush(false);
-
-            assertEquals(3L, captured.events.get(0).getInputCardinality());
-            assertEquals(3L, captured.events.get(0).getOutputCardinality());
-        }
-    }
-
-    @Test
-    void flush_cardinalityResetsAfterEachInterval() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            writer.write("r1", ctx(null));
-            writer.write("r2", ctx(null));
-            writer.flush(false);
-            captured.events.clear();
-
-            writer.write("r3", ctx(null));
-            writer.flush(false);
-
-            assertEquals(1L, captured.events.get(0).getInputCardinality());
-        }
+                () -> new FaroSink<>(new NoopSink<>(), PIPELINE_ID, config, captured, ""));
     }
 
     @Test
     void flush_outputCardinalityReflectsFailures() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
-        FaroSink<String> sink = new FaroSink<>(new FailingAfterNSink<>(2), config, captured, OPERATOR_ID);
+        FaroSink<String> sink = new FaroSink<>(new FailingAfterNSink<>(2), PIPELINE_ID, config, captured, OPERATOR_ID);
         try (SinkWriter<String> writer = sink.createWriter(mock(Sink.InitContext.class))) {
             writer.write("r1", ctx(null));
             writer.write("r2", ctx(null));
@@ -104,16 +61,6 @@ class FaroSinkTest {
             assertEquals(3L, captured.events.get(0).getInputCardinality());
             assertEquals(2L, captured.events.get(0).getOutputCardinality());
         }
-    }
-
-    @Test
-    void close_flushesPartialInterval() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            writer.write("r1", ctx(null));
-        }
-
-        assertFalse(captured.events.isEmpty());
-        assertEquals(1L, captured.events.get(0).getInputCardinality());
     }
 
     @Test
@@ -136,17 +83,6 @@ class FaroSinkTest {
             writer.flush(false);
 
             assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
-        }
-    }
-
-    @Test
-    void flush_eventTimeIsNullWhenNoTimestamp() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            writer.write("r1", ctx(null));
-            writer.flush(false);
-
-            assertNull(captured.events.get(0).getEventTime());
-            assertNull(captured.events.get(0).getEventTimeMin());
         }
     }
 

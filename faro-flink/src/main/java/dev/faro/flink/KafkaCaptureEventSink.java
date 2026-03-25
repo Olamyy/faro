@@ -66,9 +66,7 @@ public final class KafkaCaptureEventSink implements CaptureEventSink {
     }
 
     /**
-     * Returns a serializable factory for {@code KafkaCaptureEventSink}.
-     *
-     * <p>{@code bootstrapServers} is the only required property; all other Kafka producer
+     * {@code bootstrapServers} is the only required property; all other Kafka producer
      * settings use the defaults below unless overridden via {@code extraProperties}:
      * <ul>
      *   <li>{@code acks=1} — leader acknowledgement only; balances durability and latency

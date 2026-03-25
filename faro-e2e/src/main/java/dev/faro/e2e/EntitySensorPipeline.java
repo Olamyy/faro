@@ -1,9 +1,12 @@
 package dev.faro.e2e;
 
+import dev.faro.core.CaptureEvent;
+import dev.faro.core.DataClassification;
 import dev.faro.flink.AsyncCaptureEventSink;
 import dev.faro.flink.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
 import dev.faro.flink.FaroConfig;
+import dev.faro.flink.FaroFeatureConfig;
 import dev.faro.flink.FaroSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -26,27 +29,35 @@ import java.time.Duration;
 import java.util.Random;
 
 /**
- * Shared sensor pipeline wiring. Accepts a {@link CaptureEventSinkFactory} so each entry-point
- * job can supply its own sink without duplicating the pipeline definition.
+ * Sensor pipeline demonstrating ENTITY-mode capture alongside the standard AGGREGATE capture.
  *
- * <p>The factory is automatically wrapped in {@link AsyncCaptureEventSink} with a capacity of
- * 1,000 so capture events never block the operator thread regardless of the chosen sink.
+ * <p>The {@code temperature} feature is configured with {@code deviceId} as the entity key
+ * and {@link DataClassification#NON_PERSONAL}, so each window fires both an AGGREGATE event
+ * (one per feature per window) and an ENTITY event carrying the device's temperature sum and
+ * its identifier. The {@code window_throughput} feature is AGGREGATE-only to show the two
+ * modes coexisting on the same operator.
  */
-final class SensorPipeline {
+final class EntitySensorPipeline {
 
     private static final String[] DEVICES = {"device-A", "device-B", "device-C", "device-D"};
     private static final long WINDOW_SIZE_MS = 10_000L;
     private static final double RECORDS_PER_SECOND = 8.0;
 
-    private SensorPipeline() {}
+    private EntitySensorPipeline() {}
 
     static void execute(CaptureEventSinkFactory innerFactory, String jobName) throws Exception {
-        execute(innerFactory, jobName, "sensor-pipeline-e2e");
+        execute(innerFactory, jobName, "sensor-pipeline-entity-e2e");
     }
 
     static void execute(CaptureEventSinkFactory innerFactory, String jobName, String pipelineId) throws Exception {
         FaroConfig<SensorReading> config = FaroConfig.<SensorReading>builder()
-                .features("temperature")
+                .feature("temperature", FaroFeatureConfig.<SensorReading>builder()
+                        .entityKey(r -> r.deviceId)
+                        .featureValue(r -> r.temperature)
+                        .valueType(CaptureEvent.FeatureValueType.SCALAR_DOUBLE)
+                        .classification(DataClassification.NON_PERSONAL)
+                        .build())
+                .features("window_throughput")
                 .build();
 
         CaptureEventSinkFactory sinkFactory =
@@ -81,7 +92,7 @@ final class SensorPipeline {
                 .process(faro.windowTrace(new TemperatureSumFn(), config))
                 .returns(TypeInformation.of(SensorReading.class))
                 .uid("window.temperature-sum")
-                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-output.txt"), pipelineId, config, sinkFactory, "sink.file"))
+                .sinkTo(new FaroSink<>(new FileSink<>("/tmp/faro-entity-output.txt"), pipelineId, config, sinkFactory, "sink.file"))
                 .uid("sink.file");
 
         env.execute(jobName);

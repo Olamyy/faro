@@ -1,6 +1,7 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.DataClassification;
 import org.apache.flink.api.common.functions.RichFunction;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
@@ -12,6 +13,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
@@ -41,6 +43,8 @@ class FaroProcessFunctionBase implements Serializable {
                    CaptureEvent.OperatorType.AGG);
 
     final CaptureEvent.OperatorType operatorType;
+    final String pipelineId;
+    @SuppressWarnings("rawtypes")
     final FaroConfig config;
     final CaptureEventSinkFactory captureEventSinkFactory;
 
@@ -57,8 +61,10 @@ class FaroProcessFunctionBase implements Serializable {
      */
     transient AtomicLong timerCounterRef;
 
+    @SuppressWarnings("rawtypes")
     FaroProcessFunctionBase(
             CaptureEvent.OperatorType operatorType,
+            String pipelineId,
             FaroConfig config,
             CaptureEventSinkFactory captureEventSinkFactory,
             RichFunction owner) {
@@ -67,6 +73,7 @@ class FaroProcessFunctionBase implements Serializable {
                     "FaroProcessFunctionBase: operatorType must be FILTER, MAP, or AGG; got " + operatorType);
         }
         this.operatorType = operatorType;
+        this.pipelineId = pipelineId;
         this.config = config;
         this.captureEventSinkFactory = captureEventSinkFactory;
         this.owner = owner;
@@ -92,7 +99,7 @@ class FaroProcessFunctionBase implements Serializable {
         String uid = rtc.getOperatorUniqueID();
         if (uid == null || uid.isEmpty()) {
             throw new IllegalStateException(
-                    "Faro process function on pipeline '" + config.getPipelineId()
+                    "Faro process function on pipeline '" + pipelineId
                     + "' has no stable operator UID. "
                     + "Call .uid(\"your-stable-id\") on the operator in your pipeline definition. "
                     + "Without a stable UID, lineage correlation will break across restarts.");
@@ -104,14 +111,15 @@ class FaroProcessFunctionBase implements Serializable {
         return owner.getRuntimeContext();
     }
 
-    void processElement(Long timestamp, TimerService timerService, ThrowingRunnable delegateCall)
-            throws Exception {
+    <IN> void processElement(IN record, Long timestamp, TimerService timerService,
+            ThrowingRunnable delegateCall) throws Exception {
         counters.input.incrementAndGet();
         long ts = timestamp != null ? timestamp : Long.MIN_VALUE;
         long wm = timerService != null ? timerService.currentWatermark() : Long.MIN_VALUE;
         recordObserved(ts, wm);
         delegateCall.run();
         counters.output.incrementAndGet();
+        emitEntityEvents(record, ts);
     }
 
     @FunctionalInterface
@@ -128,6 +136,79 @@ class FaroProcessFunctionBase implements Serializable {
         return timerCounterRef != null ? timerCounterRef.getAndSet(0) : null;
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private <IN> void emitEntityEvents(IN record, long timestampMs) {
+        Map<String, FaroFeatureConfig> features = (Map<String, FaroFeatureConfig>) config.getFeatures();
+        for (Map.Entry<String, FaroFeatureConfig> entry : features.entrySet()) {
+            FaroFeatureConfig<IN> fc = entry.getValue();
+            if (fc == null) continue;
+
+            if (fc.getSampleRate() < 1.0
+                    && ThreadLocalRandom.current().nextDouble() >= fc.getSampleRate()) {
+                continue;
+            }
+
+            String processingTime = Instant.now().toString();
+            String eventTime = timestampMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(timestampMs).toString();
+            String watermark = lastWatermarkMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(lastWatermarkMs).toString();
+
+            boolean suppress = fc.getClassification() == DataClassification.PERSONAL
+                    || fc.getClassification() == DataClassification.SENSITIVE;
+
+            CaptureEvent.Builder builder = CaptureEvent.builder()
+                    .pipelineId(pipelineId)
+                    .operatorId(operatorId)
+                    .operatorType(operatorType)
+                    .featureName(entry.getKey())
+                    .processingTime(processingTime)
+                    .inputCardinality(1)
+                    .outputCardinality(1)
+                    .emitIntervalMs(0)
+                    .traceId(traceId)
+                    .spanId(newSpanId())
+                    .watermark(watermark)
+                    .eventTime(eventTime)
+                    .captureDropSinceLast(false);
+
+            if (suppress) {
+                builder.captureMode(CaptureEvent.CaptureMode.AGGREGATE);
+            } else {
+                String entityId = fc.getEntityKey().apply(record);
+                Object value = fc.getFeatureValue().apply(record);
+                builder.captureMode(CaptureEvent.CaptureMode.ENTITY)
+                        .entityId(entityId)
+                        .featureValueType(fc.getValueType())
+                        .featureValue(valueToBytes(value, fc.getValueType()));
+            }
+
+            captureEventSink.emit(builder.build());
+        }
+    }
+
+    private static byte[] valueToBytes(Object value, CaptureEvent.FeatureValueType type) {
+        if (value == null) return null;
+        return switch (type) {
+            case SCALAR_DOUBLE -> doubleToBytes(((Number) value).doubleValue());
+            case SCALAR_LONG -> longToBytes(((Number) value).longValue());
+            case SCALAR_STRING -> ((String) value).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            case VECTOR_FLOAT, STRUCT -> value instanceof byte[] b ? b : null;
+        };
+    }
+
+    private static byte[] doubleToBytes(double v) {
+        long bits = Double.doubleToLongBits(v);
+        return longToBytes(bits);
+    }
+
+    private static byte[] longToBytes(long v) {
+        byte[] b = new byte[8];
+        for (int i = 7; i >= 0; i--) {
+            b[i] = (byte) (v & 0xFF);
+            v >>= 8;
+        }
+        return b;
+    }
+
     void flush() {
         Long timerFiredCount = timerFiredCountSnapshot();
         IntervalCounters.Snapshot s = counters.snapshot();
@@ -136,13 +217,15 @@ class FaroProcessFunctionBase implements Serializable {
         String watermark = lastWatermarkMs == Long.MIN_VALUE
                 ? null : Instant.ofEpochMilli(lastWatermarkMs).toString();
 
-        emitCaptureEvents(captureEventSink, config, operatorId, operatorType, traceId,
+        emitCaptureEvents(captureEventSink, pipelineId, config, operatorId, operatorType, traceId,
                 s.nowMs(), s.input(), s.output(), s.maxEventTimeMs(), s.minEventTimeMs(),
                 s.intervalMs(), watermark, timerFiredCount);
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
     static void emitCaptureEvents(
             CaptureEventSink sink,
+            String pipelineId,
             FaroConfig config,
             String operatorId,
             CaptureEvent.OperatorType operatorType,
@@ -161,9 +244,9 @@ class FaroProcessFunctionBase implements Serializable {
         String eventTimeMin = minEventTimeMs == Long.MIN_VALUE ? null : Instant.ofEpochMilli(minEventTimeMs).toString();
         boolean dropped = sink.droppedSinceLastFlush();
 
-        for (String featureName : config.getFeatureNames()) {
+        for (String featureName : ((Map<String, ?>) config.getFeatures()).keySet()) {
             sink.emit(CaptureEvent.builder()
-                    .pipelineId(config.getPipelineId())
+                    .pipelineId(pipelineId)
                     .operatorId(operatorId)
                     .operatorType(operatorType)
                     .captureMode(CaptureEvent.CaptureMode.AGGREGATE)

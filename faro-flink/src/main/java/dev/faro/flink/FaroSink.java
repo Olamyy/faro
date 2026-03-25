@@ -20,21 +20,26 @@ import java.time.Instant;
 public final class FaroSink<IN> implements Sink<IN> {
 
     private final Sink<IN> delegate;
+    private final String pipelineId;
+    @SuppressWarnings("rawtypes")
     private final FaroConfig config;
     private final CaptureEventSinkFactory captureEventSinkFactory;
     private final String operatorId;
 
+    @SuppressWarnings("rawtypes")
     public FaroSink(
             Sink<IN> delegate,
+            String pipelineId,
             FaroConfig config,
             CaptureEventSinkFactory captureEventSinkFactory,
             String operatorId) {
         if (operatorId == null || operatorId.isEmpty()) {
             throw new IllegalArgumentException(
-                    "FaroSink on pipeline '" + config.getPipelineId() + "' requires a non-empty operatorId. "
+                    "FaroSink on pipeline '" + pipelineId + "' requires a non-empty operatorId. "
                     + "Pass a stable, unique string that identifies this sink across restarts.");
         }
         this.delegate = delegate;
+        this.pipelineId = pipelineId;
         this.config = config;
         this.captureEventSinkFactory = captureEventSinkFactory;
         this.operatorId = operatorId;
@@ -83,7 +88,7 @@ public final class FaroSink<IN> implements Sink<IN> {
             if (s.input() > 0) {
                 String watermark = lastRealWatermarkMs == Long.MIN_VALUE
                         ? null : Instant.ofEpochMilli(lastRealWatermarkMs).toString();
-                FaroProcessFunctionBase.emitCaptureEvents(captureEventSink, config, operatorId,
+                FaroProcessFunctionBase.emitCaptureEvents(captureEventSink, pipelineId, config, operatorId,
                         CaptureEvent.OperatorType.SINK, traceId, s.nowMs(), s.input(), s.output(),
                         s.maxEventTimeMs(), s.minEventTimeMs(), s.intervalMs(), watermark, null);
             }
@@ -97,5 +102,4 @@ public final class FaroSink<IN> implements Sink<IN> {
             delegateWriter.close();
         }
     }
-
 }

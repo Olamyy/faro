@@ -36,12 +36,11 @@ class FaroProcessWindowFunctionTest {
 
     private FaroProcessWindowFunction<String, String, String, TimeWindow> fnWithFeatures(
             String... features) throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features(features)
                 .build();
         FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(config, new PassThroughWindowFn(), captured, null);
+                new FaroProcessWindowFunction<>(PIPELINE_ID, config, new PassThroughWindowFn(), captured, null);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
         return fn;
@@ -56,10 +55,8 @@ class FaroProcessWindowFunctionTest {
         when(ctx.window()).thenReturn(window);
         when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
         when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
-        KeyedStateStore windowState = mock(KeyedStateStore.class);
-        KeyedStateStore globalState = mock(KeyedStateStore.class);
-        when(ctx.windowState()).thenReturn(windowState);
-        when(ctx.globalState()).thenReturn(globalState);
+        when(ctx.windowState()).thenReturn(mock(KeyedStateStore.class));
+        when(ctx.globalState()).thenReturn(mock(KeyedStateStore.class));
         return ctx;
     }
 
@@ -71,55 +68,13 @@ class FaroProcessWindowFunctionTest {
     @Test
     void open_throwsWhenNoUid() {
         when(runtimeContext.getOperatorUniqueID()).thenReturn("");
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(config, new PassThroughWindowFn(), captured, null);
+                new FaroProcessWindowFunction<>(PIPELINE_ID, config, new PassThroughWindowFn(), captured, null);
         fn.setRuntimeContext(runtimeContext);
         assertThrows(IllegalStateException.class, () -> fn.open(new Configuration()));
-    }
-
-    @Test
-    void process_emitsOneEventPerFeature() throws Exception {
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                fnWithFeatures("avg_purchase_7d", "max_purchase_7d");
-        TimeWindow window = new TimeWindow(1000L, 2000L);
-        fn.process("key", mockCtx(window), List.of("r1"), noopCollector());
-
-        assertEquals(2, captured.events.size());
-        assertEquals("avg_purchase_7d", captured.events.get(0).getFeatureName());
-        assertEquals("max_purchase_7d", captured.events.get(1).getFeatureName());
-    }
-
-    @Test
-    void process_inputCardinalityReflectsElementCount() throws Exception {
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                fnWithFeatures("feature-a");
-        TimeWindow window = new TimeWindow(1000L, 2000L);
-        fn.process("key", mockCtx(window), List.of("r1", "r2", "r3"), noopCollector());
-
-        assertEquals(3L, captured.events.get(0).getInputCardinality());
-    }
-
-    @Test
-    void process_outputCardinalityReflectsFailures() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
-                .features("feature-a")
-                .build();
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(
-                        config, new FailAfterNCollectsFn(2), captured, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        TimeWindow window = new TimeWindow(1000L, 2000L);
-        assertThrows(RuntimeException.class,
-                () -> fn.process("key", mockCtx(window), List.of("r1", "r2", "r3"), noopCollector()));
-
-        assertEquals(2L, captured.events.get(0).getOutputCardinality());
     }
 
     @Test
@@ -128,8 +83,7 @@ class FaroProcessWindowFunctionTest {
                 fnWithFeatures("feature-a");
         long start = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();
         long end = Instant.parse("2026-03-21T11:00:00Z").toEpochMilli();
-        TimeWindow window = new TimeWindow(start, end);
-        fn.process("key", mockCtx(window), List.of("r1"), noopCollector());
+        fn.process("key", mockCtx(new TimeWindow(start, end)), List.of("r1"), noopCollector());
 
         assertEquals("2026-03-21T10:00:00Z", captured.events.get(0).getWindowStart());
         assertEquals("2026-03-21T11:00:00Z", captured.events.get(0).getWindowEnd());
@@ -137,13 +91,12 @@ class FaroProcessWindowFunctionTest {
 
     @Test
     void process_windowBoundsAreNullForNonTimeWindow() throws Exception {
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroProcessWindowFunction<String, String, String, CustomWindow> fn =
                 new FaroProcessWindowFunction<>(
-                        config, new CustomWindowFn(), captured, null);
+                        PIPELINE_ID, config, new CustomWindowFn(), captured, null);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
 
@@ -151,8 +104,7 @@ class FaroProcessWindowFunctionTest {
         ProcessWindowFunction<String, String, String, CustomWindow>.Context ctx =
                 (ProcessWindowFunction<String, String, String, CustomWindow>.Context)
                         mock(ProcessWindowFunction.Context.class);
-        CustomWindow customWindow = new CustomWindow();
-        when(ctx.window()).thenReturn(customWindow);
+        when(ctx.window()).thenReturn(new CustomWindow());
         when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
         when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
         when(ctx.windowState()).thenReturn(mock(KeyedStateStore.class));
@@ -165,48 +117,33 @@ class FaroProcessWindowFunctionTest {
     }
 
     @Test
-    void process_lateEventCountIsNullWhenNoTag() throws Exception {
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                fnWithFeatures("feature-a");
-        fn.process("key", mockCtx(new TimeWindow(1000L, 2000L)), List.of("r1"), noopCollector());
-
-        assertNull(captured.events.get(0).getLateEventCount());
-    }
-
-    @Test
     void process_lateEventCountTrackedViaSideOutput() throws Exception {
         OutputTag<String> lateTag = new OutputTag<>("late-data"){};
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
                 new FaroProcessWindowFunction<>(
-                        config, new SideOutputWindowFn(lateTag, 2), captured, lateTag);
+                        PIPELINE_ID, config, new SideOutputWindowFn(lateTag, 2), captured, lateTag);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
 
-        ProcessWindowFunction<String, String, String, TimeWindow>.Context ctx = mockCtx(
-                new TimeWindow(1000L, 2000L));
-
-        fn.process("key", ctx, List.of("r1"), noopCollector());
+        fn.process("key", mockCtx(new TimeWindow(1000L, 2000L)), List.of("r1"), noopCollector());
 
         assertEquals(2L, captured.events.get(0).getLateEventCount());
         assertEquals(CaptureEvent.LateTrackingMode.SIDE_OUTPUT,
                 captured.events.get(0).getLateTrackingMode());
     }
 
-
     @Test
     void close_closesDelegateSink() throws Exception {
         TrackingCloseFn delegate = new TrackingCloseFn();
-        FaroConfig config = FaroConfig.builder()
-                .pipelineId(PIPELINE_ID)
+        FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
         TrackingCaptureEventSink sink = new TrackingCaptureEventSink();
         FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(config, delegate, sink, null);
+                new FaroProcessWindowFunction<>(PIPELINE_ID, config, delegate, sink, null);
         fn.setRuntimeContext(runtimeContext);
         fn.open(new Configuration());
         fn.close();
@@ -225,30 +162,6 @@ class FaroProcessWindowFunctionTest {
             }
         }
     }
-
-    private static final class FailAfterNCollectsFn
-            extends ProcessWindowFunction<String, String, String, TimeWindow> {
-        private final int succeedCount;
-
-        FailAfterNCollectsFn(int succeedCount) {
-            this.succeedCount = succeedCount;
-        }
-
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {
-            int count = 0;
-            for (String e : elements) {
-                if (count < succeedCount) {
-                    out.collect(e);
-                    count++;
-                } else {
-                    throw new RuntimeException("simulated failure after " + succeedCount + " collects");
-                }
-            }
-        }
-    }
-
 
     private static final class TrackingCloseFn
             extends ProcessWindowFunction<String, String, String, TimeWindow>

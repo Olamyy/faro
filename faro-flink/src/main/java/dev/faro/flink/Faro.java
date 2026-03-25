@@ -12,47 +12,58 @@ import java.util.Objects;
 /**
  * Entry point for Faro instrumentation. Create one instance per pipeline:
  * <pre>{@code
- * Faro faro = new Faro(config, sink);
+ * Faro faro = new Faro("my-pipeline-id", sink);
  *
- * stream.process(faro.trace(OperatorType.MAP, myFn)).uid("my-op");
- * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn)).uid("my-keyed-op");
+ * stream.process(faro.trace(OperatorType.MAP, myFn, config)).uid("my-op");
+ * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn, config)).uid("my-keyed-op");
  * windowedStream.process(faro.windowTrace(myWindowFn)).uid("my-window-op");
- * windowedStream.process(faro.windowTrace(myWindowFn, lateDataTag)).uid("my-window-op");
  * }</pre>
+ *
+ * <p>{@code pipelineId} is stable across restarts and shared by all operators in the pipeline.
+ * It is injected into every emitted {@link CaptureEvent} by this instance.
+ *
+ * <p><b>Important:</b> {@code .uid()} must be called on the {@code DataStream} returned by
+ * {@code .process()}, not on the stream before it. Wrong placement sets the UID on the upstream
+ * operator; the adapter's UID validation in {@code open()} will catch it at runtime.
  */
 public final class Faro {
 
-    private final FaroConfig config;
+    private final String pipelineId;
     private final CaptureEventSinkFactory sinkFactory;
 
-    public Faro(FaroConfig config, CaptureEventSinkFactory sinkFactory) {
-        Objects.requireNonNull(config, "config must not be null");
+    public Faro(String pipelineId, CaptureEventSinkFactory sinkFactory) {
+        if (pipelineId == null || pipelineId.isEmpty()) {
+            throw new IllegalArgumentException("Faro: pipelineId must not be null or empty");
+        }
         Objects.requireNonNull(sinkFactory, "sinkFactory must not be null");
-        this.config = config;
+        this.pipelineId = pipelineId;
         this.sinkFactory = sinkFactory;
     }
 
     public <IN, OUT> FaroProcessFunction<IN, OUT> trace(
             CaptureEvent.OperatorType type,
-            ProcessFunction<IN, OUT> delegate) {
-        return new FaroProcessFunction<>(type, config, delegate, sinkFactory);
+            ProcessFunction<IN, OUT> delegate,
+            FaroConfig<IN> config) {
+        return new FaroProcessFunction<>(type, pipelineId, config, delegate, sinkFactory);
     }
 
     public <KEY, IN, OUT> FaroKeyedProcessFunction<KEY, IN, OUT> keyedTrace(
             CaptureEvent.OperatorType type,
-            KeyedProcessFunction<KEY, IN, OUT> delegate) {
-        return new FaroKeyedProcessFunction<>(type, config, delegate, sinkFactory);
-    }
-
-    public <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowTrace(
-            ProcessWindowFunction<IN, OUT, KEY, W> delegate) {
-        return new FaroProcessWindowFunction<>(config, delegate, sinkFactory, null);
+            KeyedProcessFunction<KEY, IN, OUT> delegate,
+            FaroConfig<IN> config) {
+        return new FaroKeyedProcessFunction<>(type, pipelineId, config, delegate, sinkFactory);
     }
 
     public <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowTrace(
             ProcessWindowFunction<IN, OUT, KEY, W> delegate,
-            OutputTag<IN> lateDataTag) {
-        return new FaroProcessWindowFunction<>(config, delegate, sinkFactory, lateDataTag);
+            FaroConfig<IN> config) {
+        return new FaroProcessWindowFunction<>(pipelineId, config, delegate, sinkFactory, null);
     }
 
+    public <IN, OUT, KEY, W extends Window> FaroProcessWindowFunction<IN, OUT, KEY, W> windowTrace(
+            ProcessWindowFunction<IN, OUT, KEY, W> delegate,
+            FaroConfig<IN> config,
+            OutputTag<IN> lateDataTag) {
+        return new FaroProcessWindowFunction<>(pipelineId, config, delegate, sinkFactory, lateDataTag);
+    }
 }

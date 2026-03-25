@@ -135,16 +135,12 @@ public final class OtelCaptureEventSink implements CaptureEventSink {
     }
 
     /**
-     * Returns a serializable factory for {@code OtelCaptureEventSink} exporting to {@code otlpEndpoint}
-     * (e.g. {@code http://tempo:4318/v1/traces}).
+     * Exports to {@code otlpEndpoint} (e.g. {@code http://tempo:4318/v1/traces}).
      */
     public static CaptureEventSinkFactory factory(CaptureEventSinkFactory inner, String otlpEndpoint) {
         return () -> new OtelCaptureEventSink(inner.create(), otlpEndpoint);
     }
 
-    /**
-     * Returns a factory using the default OTLP/HTTP endpoint {@code http://localhost:4318/v1/traces}.
-     */
     public static CaptureEventSinkFactory factory(CaptureEventSinkFactory inner) {
         return factory(inner, "http://localhost:4318/v1/traces");
     }
