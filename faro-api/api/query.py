@@ -1,5 +1,6 @@
 import logging
 import re
+import struct
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -285,6 +286,75 @@ def _any_violation_exists(pipeline_id: str) -> bool:
     base = settings.local_path
     path = Path(base) / "violations" / f"pipeline_id={pipeline_id}"
     return path.exists() and any(path.rglob("part-*.parquet"))
+
+
+def _decode_feature_value(raw: bytes | None, value_type: str | None) -> float | int | str | None:
+    if raw is None or value_type is None:
+        return None
+    try:
+        if value_type == "SCALAR_DOUBLE":
+            return struct.unpack(">d", raw)[0]
+        if value_type == "SCALAR_LONG":
+            return struct.unpack(">q", raw)[0]
+        if value_type == "SCALAR_STRING":
+            return raw.decode("utf-8")
+    except Exception:
+        logger.warning("Failed to decode feature_value for type %s", value_type)
+    return None
+
+
+def query_entity_values(
+    pipeline_id: str,
+    feature_name: str,
+    window: str,
+    entity_id: str | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+
+    if not _any_parquet_exists(glob_pattern):
+        return []
+
+    delta = _parse_window(window)
+    cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
+
+    conditions = ["capture_mode = 'ENTITY'", "feature_name = ?", "processing_time >= ?"]
+    params: list[Any] = [feature_name, cutoff]
+
+    if entity_id:
+        conditions.append("entity_id = ?")
+        params.append(entity_id)
+
+    where_clause = " AND ".join(conditions)
+
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"""
+            SELECT entity_id, feature_value, feature_value_type, processing_time, event_time
+            FROM read_parquet('{glob_pattern}')
+            WHERE {where_clause}
+            ORDER BY processing_time DESC
+            LIMIT {limit}
+            """,
+            params,
+        ).fetchall()
+    except (duckdb.IOException, duckdb.BinderException):
+        logger.warning("Could not query entity values at %s", glob_pattern)
+        return []
+    finally:
+        con.close()
+
+    return [
+        {
+            "entity_id": r[0],
+            "feature_value_decoded": _decode_feature_value(r[1], r[2]),
+            "feature_value_type": r[2],
+            "processing_time": r[3],
+            "event_time": r[4],
+        }
+        for r in rows
+    ]
 
 
 def check_freshness_violation(

@@ -46,6 +46,7 @@ _SCHEMA = pa.schema([
     ("value_p95", pa.float64()),
     ("null_count", pa.int64()),
     ("entity_id", pa.string()),
+    ("feature_value", pa.binary()),
     ("feature_value_type", pa.string()),
     ("upstream_source", pa.string()),
     ("upstream_system", pa.string()),
@@ -177,6 +178,7 @@ def _events_to_table(events: list[CaptureEvent]) -> pa.Table:
         rows["value_p95"].append(e.value_p95)
         rows["null_count"].append(e.null_count)
         rows["entity_id"].append(e.entity_id)
+        rows["feature_value"].append(e.feature_value)
         rows["feature_value_type"].append(e.feature_value_type)
         rows["upstream_source"].append(e.upstream_source)
         rows["upstream_system"].append(e.upstream_system)
