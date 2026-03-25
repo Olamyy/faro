@@ -185,7 +185,7 @@ class FaroProcessFunctionBase implements Serializable {
         }
     }
 
-    private static byte[] valueToBytes(Object value, CaptureEvent.FeatureValueType type) {
+    static byte[] valueToBytes(Object value, CaptureEvent.FeatureValueType type) {
         if (value == null) return null;
         return switch (type) {
             case SCALAR_DOUBLE -> doubleToBytes(((Number) value).doubleValue());

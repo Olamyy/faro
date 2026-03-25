@@ -1,5 +1,6 @@
+import base64
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class CaptureEvent(BaseModel):
@@ -37,6 +38,17 @@ class CaptureEvent(BaseModel):
     entity_id: str | None = None
     feature_value: bytes | None = None
     feature_value_type: str | None = None
+
+    @field_validator("feature_value", mode="before")
+    @classmethod
+    def _decode_feature_value(cls, v: object) -> bytes | None:
+        if v is None:
+            return None
+        if isinstance(v, bytes):
+            return v
+        if isinstance(v, str):
+            return base64.b64decode(v)
+        return v
     upstream_source: str | None = None
     upstream_system: str | None = None
     trace_id: str
@@ -88,3 +100,18 @@ class Violation(BaseModel):
 
 class ViolationsResponse(BaseModel):
     violations: list[Violation]
+
+
+class EntityValuePoint(BaseModel):
+    entity_id: str | None
+    feature_value_decoded: float | int | str | None
+    feature_value_type: str | None
+    processing_time: str
+    event_time: str | None
+
+
+class EntityValuesResponse(BaseModel):
+    feature_name: str
+    pipeline_id: str
+    window: str
+    values: list[EntityValuePoint]

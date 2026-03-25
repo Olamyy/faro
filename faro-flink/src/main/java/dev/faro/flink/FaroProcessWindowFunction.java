@@ -1,6 +1,7 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.DataClassification;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Faro observability decorator for Flink {@link ProcessWindowFunction}.
@@ -148,8 +150,57 @@ public final class FaroProcessWindowFunction<IN, OUT, KEY, W extends Window>
             captureEventSink.emit(event);
         }
 
+        emitEntityEvents(list, eventTime, watermark, processingTime);
+
         if (delegateException != null) {
             throw delegateException;
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void emitEntityEvents(List<IN> elements, String eventTime, String watermark, String processingTime) {
+        Map<String, FaroFeatureConfig> features = (Map<String, FaroFeatureConfig>) config.getFeatures();
+        for (Map.Entry<String, FaroFeatureConfig> entry : features.entrySet()) {
+            FaroFeatureConfig<IN> fc = entry.getValue();
+            if (fc == null) continue;
+
+            for (IN record : elements) {
+                if (fc.getSampleRate() < 1.0
+                        && ThreadLocalRandom.current().nextDouble() >= fc.getSampleRate()) {
+                    continue;
+                }
+
+                boolean suppress = fc.getClassification() == DataClassification.PERSONAL
+                        || fc.getClassification() == DataClassification.SENSITIVE;
+
+                CaptureEvent.Builder builder = CaptureEvent.builder()
+                        .pipelineId(pipelineId)
+                        .operatorId(operatorId)
+                        .operatorType(CaptureEvent.OperatorType.WINDOW)
+                        .featureName(entry.getKey())
+                        .processingTime(processingTime)
+                        .inputCardinality(1)
+                        .outputCardinality(1)
+                        .emitIntervalMs(0)
+                        .traceId(traceId)
+                        .spanId(FaroProcessFunctionBase.newSpanId())
+                        .watermark(watermark)
+                        .eventTime(eventTime)
+                        .captureDropSinceLast(false);
+
+                if (suppress) {
+                    builder.captureMode(CaptureEvent.CaptureMode.AGGREGATE);
+                } else {
+                    String entityId = fc.getEntityKey().apply(record);
+                    Object value = fc.getFeatureValue().apply(record);
+                    builder.captureMode(CaptureEvent.CaptureMode.ENTITY)
+                            .entityId(entityId)
+                            .featureValueType(fc.getValueType())
+                            .featureValue(FaroProcessFunctionBase.valueToBytes(value, fc.getValueType()));
+                }
+
+                captureEventSink.emit(builder.build());
+            }
         }
     }
 
