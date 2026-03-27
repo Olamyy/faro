@@ -357,6 +357,83 @@ def query_entity_values(
     ]
 
 
+def query_entity_value_summary(
+    pipeline_id: str,
+    feature_name: str,
+    window: str,
+) -> dict[str, Any] | None:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+    if not _any_parquet_exists(glob_pattern):
+        return None
+
+    delta = _parse_window(window)
+    cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
+
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            f"""
+            SELECT feature_value, feature_value_type
+            FROM read_parquet('{glob_pattern}')
+            WHERE capture_mode = 'ENTITY'
+              AND feature_name = ?
+              AND processing_time >= ?
+              AND feature_value IS NOT NULL
+            """,
+            [feature_name, cutoff],
+        ).fetchall()
+    except (duckdb.IOException, duckdb.BinderException):
+        logger.warning("Could not query entity values at %s", glob_pattern)
+        return None
+    finally:
+        con.close()
+
+    numeric: list[float] = []
+    null_count = 0
+    entity_count = 0
+
+    for raw, vtype in rows:
+        entity_count += 1
+        decoded = _decode_feature_value(raw, vtype)
+        if decoded is None or not isinstance(decoded, (int, float)):
+            null_count += 1
+        else:
+            numeric.append(float(decoded))
+
+    if not numeric:
+        return {
+            "feature_name": feature_name,
+            "pipeline_id": pipeline_id,
+            "window": window,
+            "entity_count": entity_count,
+            "value_min": None,
+            "value_max": None,
+            "value_mean": None,
+            "value_p50": None,
+            "value_p95": None,
+            "null_count": null_count,
+        }
+
+    numeric.sort()
+    n = len(numeric)
+    mean = sum(numeric) / n
+    p50 = numeric[int(n * 0.50)]
+    p95 = numeric[min(int(n * 0.95), n - 1)]
+
+    return {
+        "feature_name": feature_name,
+        "pipeline_id": pipeline_id,
+        "window": window,
+        "entity_count": entity_count,
+        "value_min": numeric[0],
+        "value_max": numeric[-1],
+        "value_mean": mean,
+        "value_p50": p50,
+        "value_p95": p95,
+        "null_count": null_count,
+    }
+
+
 def check_freshness_violation(
     pipeline_id: str,
     feature_name: str,

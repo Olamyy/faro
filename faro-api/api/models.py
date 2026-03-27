@@ -115,3 +115,16 @@ class EntityValuesResponse(BaseModel):
     pipeline_id: str
     window: str
     values: list[EntityValuePoint]
+
+
+class EntityValueSummary(BaseModel):
+    feature_name: str
+    pipeline_id: str
+    window: str
+    entity_count: int
+    value_min: float | None
+    value_max: float | None
+    value_mean: float | None
+    value_p50: float | None
+    value_p95: float | None
+    null_count: int
