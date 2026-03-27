@@ -1,0 +1,82 @@
+name: Release API
+
+on:
+  push:
+    tags:
+      - 'faro-api/v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release faro-api Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        run: echo "VERSION=${GITHUB_REF_NAME#faro-api/v}" >> $GITHUB_ENV
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run tests
+        run: uv run --extra dev pytest
+        working-directory: faro-api
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx build \
+            --tag ghcr.io/olamyy/faro/faro-api:$VERSION \
+            --tag ghcr.io/olamyy/faro/faro-api:latest \
+            --push faro-api/
+
+      - name: Update CHANGELOG
+        run: |
+          PREV_TAG=$(git tag --list 'faro-api/v*' --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            COMMITS=$(git log --oneline --no-merges)
+          fi
+          DATE=$(date -u +%Y-%m-%d)
+          SECTION="## faro-api v${VERSION} — ${DATE}"$'\n\n'"${COMMITS}"$'\n'
+          if [ -f CHANGELOG.md ]; then
+            HEADER=$(head -3 CHANGELOG.md)
+            BODY=$(tail -n +4 CHANGELOG.md)
+            printf '%s\n\n%s\n\n%s\n' "$HEADER" "$SECTION" "$BODY" > CHANGELOG.md
+          else
+            printf '# Changelog\n\nAll notable changes to Faro are recorded here, organized by component.\n\n%s\n' "$SECTION" > CHANGELOG.md
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update CHANGELOG for faro-api v${VERSION}"
+          git push origin HEAD:main
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git tag --list 'faro-api/v*' --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            NOTES=$(git log --oneline --no-merges)
+          fi
+          gh release create "faro-api/v${VERSION}" \
+            --title "faro-api v${VERSION}" \
+            --notes "${NOTES}"

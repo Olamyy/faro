@@ -1,0 +1,81 @@
+name: Release Java
+
+on:
+  push:
+    tags:
+      - 'faro-flink/v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release faro-core + faro-flink + faro-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Extract version
+        run: echo "VERSION=${GITHUB_REF_NAME#faro-flink/v}" >> $GITHUB_ENV
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Build JARs
+        run: ./gradlew jar :faro-e2e:shadowJar -Pversion=$VERSION
+
+      - name: Publish to GitHub Packages
+        run: ./gradlew :faro-core:publish :faro-flink:publish -Pversion=$VERSION
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG
+        run: |
+          PREV_TAG=$(git tag --list 'faro-flink/v*' --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            COMMITS=$(git log --oneline --no-merges)
+          fi
+          DATE=$(date -u +%Y-%m-%d)
+          SECTION="## faro-flink v${VERSION} — ${DATE}"$'\n\n'"${COMMITS}"$'\n'
+          if [ -f CHANGELOG.md ]; then
+            HEADER=$(head -3 CHANGELOG.md)
+            BODY=$(tail -n +4 CHANGELOG.md)
+            printf '%s\n\n%s\n\n%s\n' "$HEADER" "$SECTION" "$BODY" > CHANGELOG.md
+          else
+            printf '# Changelog\n\nAll notable changes to Faro are recorded here, organized by component.\n\n%s\n' "$SECTION" > CHANGELOG.md
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update CHANGELOG for faro-flink v${VERSION}"
+          git push origin HEAD:main
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git tag --list 'faro-flink/v*' --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            NOTES=$(git log --oneline --no-merges)
+          fi
+          gh release create "faro-flink/v${VERSION}" \
+            --title "faro-flink v${VERSION}" \
+            --notes "${NOTES}" \
+            "faro-flink/build/libs/faro-flink-${VERSION}.jar" \
+            "faro-core/build/libs/faro-core-${VERSION}.jar" \
+            "faro-e2e/build/libs/faro-e2e.jar"
