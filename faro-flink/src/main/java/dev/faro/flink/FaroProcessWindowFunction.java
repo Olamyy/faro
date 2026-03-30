@@ -1,7 +1,11 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
 import dev.faro.core.DataClassification;
+import dev.faro.core.FaroConfig;
+import dev.faro.core.FaroFeatureConfig;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;

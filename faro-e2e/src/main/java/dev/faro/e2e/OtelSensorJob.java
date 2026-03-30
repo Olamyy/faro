@@ -1,7 +1,7 @@
 package dev.faro.e2e;
 
-import dev.faro.flink.KafkaCaptureEventSink;
-import dev.faro.flink.OtelCaptureEventSink;
+import dev.faro.core.KafkaCaptureEventSink;
+import dev.faro.core.OtelCaptureEventSink;
 
 public final class OtelSensorJob {
 

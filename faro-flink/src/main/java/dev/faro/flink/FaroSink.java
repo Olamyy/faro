@@ -1,6 +1,9 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SinkWriter;
 

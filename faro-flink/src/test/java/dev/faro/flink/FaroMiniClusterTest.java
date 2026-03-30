@@ -1,6 +1,9 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;

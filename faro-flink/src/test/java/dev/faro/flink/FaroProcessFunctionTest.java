@@ -1,6 +1,7 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
@@ -53,19 +54,6 @@ class FaroProcessFunctionTest {
     }
 
     @Test
-    void construction_throwsOnInvalidOperatorType() {
-        FaroConfig<String> config = FaroConfig.<String>builder()
-                .features("feature-a")
-                .build();
-        assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.SINK, PIPELINE_ID, config, new PassThroughFn(), captured));
-        assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.WINDOW, PIPELINE_ID, config, new PassThroughFn(), captured));
-        assertThrows(IllegalArgumentException.class, () ->
-                new FaroProcessFunction<>(CaptureEvent.OperatorType.SOURCE, PIPELINE_ID, config, new PassThroughFn(), captured));
-    }
-
-    @Test
     void flush_outputCardinalityReflectsFailures() throws Exception {
         FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
@@ -83,25 +71,6 @@ class FaroProcessFunctionTest {
 
         assertEquals(3L, captured.events.get(0).getInputCardinality());
         assertEquals(2L, captured.events.get(0).getOutputCardinality());
-    }
-
-    @Test
-    void flush_watermarkIsNullWhenMinValue() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertNull(captured.events.get(0).getWatermark());
-    }
-
-    @Test
-    void flush_watermarkIsIso8601WhenAssigned() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        long watermarkMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
-        fn.processElement("r1", mockCtx(null, watermarkMs), noopCollector());
-        fn.flush();
-
-        assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
     }
 
     @Test

@@ -2,6 +2,8 @@ package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
 import dev.faro.core.DataClassification;
+import dev.faro.core.FaroConfig;
+import dev.faro.core.FaroFeatureConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.ProcessFunction;

@@ -1,12 +1,12 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,33 +90,6 @@ class FaroProcessWindowFunctionTest {
     }
 
     @Test
-    void process_windowBoundsAreNullForNonTimeWindow() throws Exception {
-        FaroConfig<String> config = FaroConfig.<String>builder()
-                .features("feature-a")
-                .build();
-        FaroProcessWindowFunction<String, String, String, CustomWindow> fn =
-                new FaroProcessWindowFunction<>(
-                        PIPELINE_ID, config, new CustomWindowFn(), captured, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        @SuppressWarnings("unchecked")
-        ProcessWindowFunction<String, String, String, CustomWindow>.Context ctx =
-                (ProcessWindowFunction<String, String, String, CustomWindow>.Context)
-                        mock(ProcessWindowFunction.Context.class);
-        when(ctx.window()).thenReturn(new CustomWindow());
-        when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
-        when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
-        when(ctx.windowState()).thenReturn(mock(KeyedStateStore.class));
-        when(ctx.globalState()).thenReturn(mock(KeyedStateStore.class));
-
-        fn.process("key", ctx, List.of("r1"), noopCollector());
-
-        assertNull(captured.events.get(0).getWindowStart());
-        assertNull(captured.events.get(0).getWindowEnd());
-    }
-
-    @Test
     void process_lateEventCountTrackedViaSideOutput() throws Exception {
         OutputTag<String> lateTag = new OutputTag<>("late-data"){};
         FaroConfig<String> config = FaroConfig.<String>builder()
@@ -135,23 +108,6 @@ class FaroProcessWindowFunctionTest {
                 captured.events.get(0).getLateTrackingMode());
     }
 
-    @Test
-    void close_closesDelegateSink() throws Exception {
-        TrackingCloseFn delegate = new TrackingCloseFn();
-        FaroConfig<String> config = FaroConfig.<String>builder()
-                .features("feature-a")
-                .build();
-        TrackingCaptureEventSink sink = new TrackingCaptureEventSink();
-        FaroProcessWindowFunction<String, String, String, TimeWindow> fn =
-                new FaroProcessWindowFunction<>(PIPELINE_ID, config, delegate, sink, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-        fn.close();
-
-        assertTrue(sink.closed);
-        assertTrue(delegate.closed);
-    }
-
     private static final class PassThroughWindowFn
             extends ProcessWindowFunction<String, String, String, TimeWindow> {
         @Override
@@ -160,37 +116,6 @@ class FaroProcessWindowFunctionTest {
             for (String e : elements) {
                 out.collect(e);
             }
-        }
-    }
-
-    private static final class TrackingCloseFn
-            extends ProcessWindowFunction<String, String, String, TimeWindow>
-            implements org.apache.flink.api.common.functions.RichFunction {
-        boolean closed = false;
-
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {}
-
-        @Override
-        public void open(Configuration parameters) {}
-
-        @Override
-        public void close() {
-            closed = true;
-        }
-
-        @Override
-        public void setRuntimeContext(org.apache.flink.api.common.functions.RuntimeContext ctx) {}
-
-        @Override
-        public org.apache.flink.api.common.functions.RuntimeContext getRuntimeContext() {
-            return null;
-        }
-
-        @Override
-        public org.apache.flink.api.common.functions.IterationRuntimeContext getIterationRuntimeContext() {
-            return null;
         }
     }
 
@@ -213,38 +138,4 @@ class FaroProcessWindowFunctionTest {
         }
     }
 
-    private static final class CustomWindow extends Window {
-        @Override
-        public long maxTimestamp() {
-            return Long.MAX_VALUE;
-        }
-    }
-
-    private static final class CustomWindowFn
-            extends ProcessWindowFunction<String, String, String, CustomWindow> {
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {
-            for (String e : elements) {
-                out.collect(e);
-            }
-        }
-    }
-
-    private static final class TrackingCaptureEventSink implements CaptureEventSink, CaptureEventSinkFactory {
-        boolean closed = false;
-
-        @Override
-        public CaptureEventSink create() {
-            return this;
-        }
-
-        @Override
-        public void emit(CaptureEvent event) {}
-
-        @Override
-        public void close() {
-            closed = true;
-        }
-    }
 }

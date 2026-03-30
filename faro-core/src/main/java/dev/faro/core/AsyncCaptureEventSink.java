@@ -1,6 +1,4 @@
-package dev.faro.flink;
-
-import dev.faro.core.CaptureEvent;
+package dev.faro.core;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -11,8 +9,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * thread. On overflow the oldest queued event is discarded and {@link #droppedSinceLastFlush()}
  * is set, allowing the next emitted capture event to carry {@code capture_drop_since_last = true}.
  *
- * <p>Flink operators are single-threaded per subtask, so the {@code poll() + offer()} overflow
- * sequence is not atomic but is safe in practice — concurrent {@link #emit} calls do not occur.
  */
 public final class AsyncCaptureEventSink implements CaptureEventSink {
 
@@ -72,6 +68,4 @@ public final class AsyncCaptureEventSink implements CaptureEventSink {
             }
         }
     }
-
-
 }

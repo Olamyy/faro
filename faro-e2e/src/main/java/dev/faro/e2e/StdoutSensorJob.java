@@ -1,6 +1,6 @@
 package dev.faro.e2e;
 
-import dev.faro.flink.StdoutCaptureEventSink;
+import dev.faro.core.StdoutCaptureEventSink;
 
 public final class StdoutSensorJob {
 

@@ -1,6 +1,5 @@
-package dev.faro.flink;
+package dev.faro.core;
 
-import dev.faro.core.CaptureEvent;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
@@ -134,9 +133,6 @@ public final class OtelCaptureEventSink implements CaptureEventSink {
         if (value != null) attrs.put(key, value);
     }
 
-    /**
-     * Exports to {@code otlpEndpoint} (e.g. {@code http://tempo:4318/v1/traces}).
-     */
     public static CaptureEventSinkFactory factory(CaptureEventSinkFactory inner, String otlpEndpoint) {
         return () -> new OtelCaptureEventSink(inner.create(), otlpEndpoint);
     }

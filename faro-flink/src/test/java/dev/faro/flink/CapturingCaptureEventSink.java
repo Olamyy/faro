@@ -1,6 +1,8 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
 
 import java.util.ArrayList;
 import java.util.List;

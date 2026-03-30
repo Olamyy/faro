@@ -2,11 +2,11 @@ package dev.faro.e2e;
 
 import dev.faro.core.CaptureEvent;
 import dev.faro.core.DataClassification;
-import dev.faro.flink.AsyncCaptureEventSink;
-import dev.faro.flink.CaptureEventSinkFactory;
+import dev.faro.core.AsyncCaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
-import dev.faro.flink.FaroConfig;
-import dev.faro.flink.FaroFeatureConfig;
+import dev.faro.core.FaroConfig;
+import dev.faro.core.FaroFeatureConfig;
 import dev.faro.flink.FaroSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;

@@ -1,4 +1,4 @@
-package dev.faro.flink;
+package dev.faro.core;
 
 import java.io.Serializable;
 import java.util.Collections;
@@ -17,13 +17,8 @@ import java.util.Map;
  *       {@link FaroFeatureConfig#getSampleRate()} and classification-based suppression.</li>
  * </ul>
  *
- * <p>{@code pipelineId} is not part of this config — it is held by the {@link Faro} instance
+ * <p>{@code pipelineId} is not part of this config — it is held by the engine adapter
  * and injected at emit time.
- *
- * <p>The internal map value is nullable: {@code null} means AGGREGATE mode for that feature;
- * a non-null {@link FaroFeatureConfig} means ENTITY mode.
- *
- * @param <IN> the record type flowing through the instrumented operator
  */
 public final class FaroConfig<IN> implements Serializable {
 

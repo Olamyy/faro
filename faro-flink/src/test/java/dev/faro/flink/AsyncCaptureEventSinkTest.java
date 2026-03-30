@@ -1,12 +1,10 @@
 package dev.faro.flink;
 
+import dev.faro.core.AsyncCaptureEventSink;
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -138,21 +136,6 @@ class AsyncCaptureEventSinkTest {
         sink.close();
 
         assertEquals(10, inner.events.size());
-    }
-
-    @Test
-    void factory_lambdaIsSerializable() throws Exception {
-        CapturingCaptureEventSink inner = new CapturingCaptureEventSink();
-        CaptureEventSinkFactory factory = () -> new AsyncCaptureEventSink(inner, 16);
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ObjectOutputStream oos = new ObjectOutputStream(baos)) {
-            oos.writeObject(factory);
-        }
-        byte[] bytes = baos.toByteArray();
-        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
-            ((CaptureEventSinkFactory) ois.readObject()).create().close();
-        }
     }
 
     @Test

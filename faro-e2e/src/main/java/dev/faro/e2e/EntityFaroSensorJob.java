@@ -1,6 +1,6 @@
 package dev.faro.e2e;
 
-import dev.faro.flink.HttpCaptureEventSink;
+import dev.faro.core.HttpCaptureEventSink;
 
 public final class EntityFaroSensorJob {
 

@@ -1,6 +1,4 @@
-package dev.faro.flink;
-
-import dev.faro.core.CaptureEvent;
+package dev.faro.core;
 
 import java.io.Serial;
 
