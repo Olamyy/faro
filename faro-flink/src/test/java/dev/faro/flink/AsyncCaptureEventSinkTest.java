@@ -1,6 +1,9 @@
 package dev.faro.flink;
 
+import dev.faro.core.AsyncCaptureEventSink;
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;

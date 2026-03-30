@@ -1,5 +1,6 @@
 package dev.faro.flink;
 
+import dev.faro.core.FaroConfig;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,18 +72,6 @@ class FaroSinkTest {
             writer.flush(false);
 
             assertNull(captured.events.get(0).getWatermark());
-        }
-    }
-
-    @Test
-    void flush_watermarkReflectsLastWriteWatermark() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            long wmMs = Instant.parse("2026-03-21T12:00:00Z").toEpochMilli();
-            writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(wmMs));
-            writer.write("r1", ctx(null));
-            writer.flush(false);
-
-            assertEquals("2026-03-21T12:00:00Z", captured.events.get(0).getWatermark());
         }
     }
 

@@ -301,7 +301,6 @@ public final class CaptureEvent {
         return record;
     }
 
-    /** String fields are extracted via {@code toString()} to handle Avro {@link org.apache.avro.util.Utf8}. */
     public static CaptureEvent fromAvroRecord(GenericRecord r) {
         return new Builder()
                 .pipelineId(str(r, "pipeline_id"))

@@ -1,15 +1,14 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSinkFactory;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 
 /**
  * Faro observability decorator for Flink {@link ProcessFunction}.
- *
- * <p>See {@link FaroProcessFunctionBase} for operator type constraints, UID requirements,
- * and watermark semantics.
  */
 public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT> {
 

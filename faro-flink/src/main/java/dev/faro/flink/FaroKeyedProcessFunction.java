@@ -1,6 +1,8 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSinkFactory;
+import dev.faro.core.FaroConfig;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
@@ -10,11 +12,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Faro observability decorator for Flink {@link KeyedProcessFunction}.
  *
- * <p>Extends {@link FaroProcessFunction} behaviour with {@code timer_fired_count}: the number
- * of {@link #onTimer} callbacks fired since the last flush, reset on each flush.
- *
- * <p>See {@link FaroProcessFunctionBase} for operator type constraints, UID requirements,
- * and watermark semantics.
+ * <p>Captures {@code timer_fired_count}: the number of {@link #onTimer} callbacks fired
+ * since the last flush, reset on each flush.
  */
 public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFunction<KEY, IN, OUT> {
 

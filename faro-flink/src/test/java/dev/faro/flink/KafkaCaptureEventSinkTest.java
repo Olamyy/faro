@@ -1,6 +1,8 @@
 package dev.faro.flink;
 
 import dev.faro.core.CaptureEvent;
+import dev.faro.core.CaptureEventSink;
+import dev.faro.core.KafkaCaptureEventSink;
 import io.github.embeddedkafka.EmbeddedKafka;
 import io.github.embeddedkafka.EmbeddedKafkaConfig$;
 import org.apache.kafka.clients.consumer.ConsumerRecords;

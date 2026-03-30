@@ -1,6 +1,5 @@
-package dev.faro.flink;
+package dev.faro.core;
 
-import dev.faro.core.CaptureEvent;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -58,10 +57,6 @@ public final class HttpCaptureEventSink implements CaptureEventSink {
         client.connectionPool().evictAll();
     }
 
-    /**
-     * Default timeouts are 5 s connect and 10 s read. Override via
-     * {@link #factory(String, Duration, Duration)}.
-     */
     public static CaptureEventSinkFactory factory(String url) {
         return factory(url, Duration.ofSeconds(5), Duration.ofSeconds(10));
     }

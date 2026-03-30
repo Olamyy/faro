@@ -1,9 +1,9 @@
 package dev.faro.e2e;
 
-import dev.faro.flink.AsyncCaptureEventSink;
-import dev.faro.flink.CaptureEventSinkFactory;
+import dev.faro.core.AsyncCaptureEventSink;
+import dev.faro.core.CaptureEventSinkFactory;
 import dev.faro.flink.Faro;
-import dev.faro.flink.FaroConfig;
+import dev.faro.core.FaroConfig;
 import dev.faro.flink.FaroSink;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -28,9 +28,6 @@ import java.util.Random;
 /**
  * Shared sensor pipeline wiring. Accepts a {@link CaptureEventSinkFactory} so each entry-point
  * job can supply its own sink without duplicating the pipeline definition.
- *
- * <p>The factory is automatically wrapped in {@link AsyncCaptureEventSink} with a capacity of
- * 1,000 so capture events never block the operator thread regardless of the chosen sink.
  */
 final class SensorPipeline {
 

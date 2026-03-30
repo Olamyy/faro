@@ -1,6 +1,5 @@
-package dev.faro.flink;
+package dev.faro.core;
 
-import dev.faro.core.CaptureEvent;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -25,7 +24,7 @@ public final class KafkaCaptureEventSink implements CaptureEventSink {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaCaptureEventSink.class);
 
-    static final String DEFAULT_TOPIC = "faro.capture.events";
+    public static final String DEFAULT_TOPIC = "faro.capture.events";
 
     private final String topic;
     private final KafkaProducer<String, String> producer;
@@ -65,15 +64,6 @@ public final class KafkaCaptureEventSink implements CaptureEventSink {
         }
     }
 
-    /**
-     * {@code bootstrapServers} is the only required property; all other Kafka producer
-     * settings use the defaults below unless overridden via {@code extraProperties}:
-     * <ul>
-     *   <li>{@code acks=1} — leader acknowledgement only; balances durability and latency
-     *   <li>{@code retries=3}
-     *   <li>{@code linger.ms=5} — small batching window to reduce request overhead
-     * </ul>
-     */
     public static CaptureEventSinkFactory factory(String bootstrapServers, Properties extraProperties) {
         Properties props = defaultProperties(bootstrapServers);
         if (extraProperties != null) {

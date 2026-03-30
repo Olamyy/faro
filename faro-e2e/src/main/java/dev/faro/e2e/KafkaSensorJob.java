@@ -1,6 +1,6 @@
 package dev.faro.e2e;
 
-import dev.faro.flink.KafkaCaptureEventSink;
+import dev.faro.core.KafkaCaptureEventSink;
 
 public final class KafkaSensorJob {
 

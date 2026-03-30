@@ -1,8 +1,6 @@
-package dev.faro.flink;
+package dev.faro.core;
 
 import dev.faro.core.CaptureEvent.FeatureValueType;
-import dev.faro.core.DataClassification;
-import dev.faro.core.SerializableFunction;
 
 import java.io.Serializable;
 
@@ -20,7 +18,6 @@ import java.io.Serializable;
  * entities are captured; at 0.0 no entity events are emitted. This is the primary
  * cost control for high-cardinality pipelines.
  *
- * @param <IN> the record type flowing through the instrumented operator
  */
 public final class FaroFeatureConfig<IN> implements Serializable {
 
