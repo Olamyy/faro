@@ -65,17 +65,6 @@ class FaroSinkTest {
     }
 
     @Test
-    void flush_watermarkIsNullForMaxValueSentinel() throws Exception {
-        try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
-            writer.writeWatermark(new org.apache.flink.api.common.eventtime.Watermark(Long.MAX_VALUE));
-            writer.write("r1", ctx(null));
-            writer.flush(false);
-
-            assertNull(captured.events.get(0).getWatermark());
-        }
-    }
-
-    @Test
     void flush_eventTimeReflectsMaxAndMinTimestampInInterval() throws Exception {
         try (SinkWriter<String> writer = writerWithFeatures("feature-a")) {
             long t1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();

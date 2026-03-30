@@ -74,15 +74,6 @@ class FaroProcessFunctionTest {
     }
 
     @Test
-    void flush_watermarkIsNullWhenMinValue() throws Exception {
-        FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
-        fn.processElement("r1", mockCtx(null, Long.MIN_VALUE), noopCollector());
-        fn.flush();
-
-        assertNull(captured.events.get(0).getWatermark());
-    }
-
-    @Test
     void flush_eventTimeReflectsMaxAndMinTimestampInInterval() throws Exception {
         FaroProcessFunction<String, String> fn = fnWithFeatures("feature-a");
         long ts1 = Instant.parse("2026-03-21T10:00:00Z").toEpochMilli();

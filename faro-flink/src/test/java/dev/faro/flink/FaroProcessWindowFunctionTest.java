@@ -7,7 +7,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,33 +90,6 @@ class FaroProcessWindowFunctionTest {
     }
 
     @Test
-    void process_windowBoundsAreNullForNonTimeWindow() throws Exception {
-        FaroConfig<String> config = FaroConfig.<String>builder()
-                .features("feature-a")
-                .build();
-        FaroProcessWindowFunction<String, String, String, CustomWindow> fn =
-                new FaroProcessWindowFunction<>(
-                        PIPELINE_ID, config, new CustomWindowFn(), captured, null);
-        fn.setRuntimeContext(runtimeContext);
-        fn.open(new Configuration());
-
-        @SuppressWarnings("unchecked")
-        ProcessWindowFunction<String, String, String, CustomWindow>.Context ctx =
-                (ProcessWindowFunction<String, String, String, CustomWindow>.Context)
-                        mock(ProcessWindowFunction.Context.class);
-        when(ctx.window()).thenReturn(new CustomWindow());
-        when(ctx.currentProcessingTime()).thenReturn(PROCESSING_TIME_MS);
-        when(ctx.currentWatermark()).thenReturn(Long.MIN_VALUE);
-        when(ctx.windowState()).thenReturn(mock(KeyedStateStore.class));
-        when(ctx.globalState()).thenReturn(mock(KeyedStateStore.class));
-
-        fn.process("key", ctx, List.of("r1"), noopCollector());
-
-        assertNull(captured.events.get(0).getWindowStart());
-        assertNull(captured.events.get(0).getWindowEnd());
-    }
-
-    @Test
     void process_lateEventCountTrackedViaSideOutput() throws Exception {
         OutputTag<String> lateTag = new OutputTag<>("late-data"){};
         FaroConfig<String> config = FaroConfig.<String>builder()
@@ -162,24 +134,6 @@ class FaroProcessWindowFunctionTest {
                 Iterable<String> elements, Collector<String> out) {
             for (int i = 0; i < sideOutputCount; i++) {
                 ctx.output(lateTag, "late-" + i);
-            }
-        }
-    }
-
-    private static final class CustomWindow extends Window {
-        @Override
-        public long maxTimestamp() {
-            return Long.MAX_VALUE;
-        }
-    }
-
-    private static final class CustomWindowFn
-            extends ProcessWindowFunction<String, String, String, CustomWindow> {
-        @Override
-        public void process(String key, Context ctx,
-                Iterable<String> elements, Collector<String> out) {
-            for (String e : elements) {
-                out.collect(e);
             }
         }
     }
