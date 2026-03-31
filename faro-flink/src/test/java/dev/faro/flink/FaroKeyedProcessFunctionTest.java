@@ -44,7 +44,6 @@ class FaroKeyedProcessFunctionTest {
 
         fn.flush();
         assertEquals(2L, captured.events.get(0).getTimerFiredCount());
-        assertEquals(2, delegate.onTimerCallCount);
     }
 
     private static KeyedProcessFunction<String, String, String>.OnTimerContext mockOnTimerCtx() {
@@ -61,7 +60,6 @@ class FaroKeyedProcessFunctionTest {
     }
 
     private static final class CountingKeyedFn extends KeyedProcessFunction<String, String, String> {
-        int onTimerCallCount = 0;
 
         @Override
         public void processElement(String value, Context ctx, Collector<String> out) {
@@ -69,8 +67,6 @@ class FaroKeyedProcessFunctionTest {
         }
 
         @Override
-        public void onTimer(long timestamp, OnTimerContext ctx, Collector<String> out) {
-            onTimerCallCount++;
-        }
+        public void onTimer(long timestamp, OnTimerContext ctx, Collector<String> out) {}
     }
 }

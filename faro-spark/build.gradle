@@ -1,0 +1,71 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = 'https://maven.pkg.github.com/Olamyy/faro'
+            credentials {
+                username = System.getenv('GITHUB_ACTOR')
+                password = System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
+
+ext {
+    sparkVersion = '3.5.3'
+    scalaVersion = '2.13'
+    deltaVersion = '3.3.1'
+}
+
+tasks.withType(Test).configureEach {
+    jvmArgs(
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+        '--add-opens=java.base/java.io=ALL-UNNAMED',
+        '--add-opens=java.base/java.net=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens=java.base/sun.nio.cs=ALL-UNNAMED',
+        '--add-opens=java.base/sun.security.action=ALL-UNNAMED',
+        '--add-opens=java.base/sun.util.calendar=ALL-UNNAMED',
+        '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+    )
+}
+
+configurations.all {
+    resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+        selectHighestVersion()
+    }
+}
+
+shadowJar {
+    archiveBaseName = 'faro-spark'
+    archiveClassifier = 'databricks'
+    archiveVersion = ''
+    zip64 = true
+    mergeServiceFiles()
+}
+
+dependencies {
+    api project(':faro-core')
+
+    compileOnly "org.apache.spark:spark-sql_${scalaVersion}:${sparkVersion}"
+    compileOnly "io.delta:delta-spark_${scalaVersion}:${deltaVersion}"
+
+    testImplementation "org.apache.spark:spark-sql_${scalaVersion}:${sparkVersion}"
+}
