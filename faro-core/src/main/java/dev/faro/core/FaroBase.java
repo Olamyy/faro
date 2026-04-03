@@ -3,9 +3,6 @@ package dev.faro.core;
 import java.io.Serializable;
 import java.util.Objects;
 
-/**
- * Engine-agnostic base for Faro pipeline instrumentation.
- */
 public abstract class FaroBase implements Serializable {
 
     private final String pipelineId;

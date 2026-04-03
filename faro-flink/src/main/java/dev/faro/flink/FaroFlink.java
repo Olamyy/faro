@@ -13,7 +13,7 @@ import org.apache.flink.util.OutputTag;
 /**
  * Entry point for Faro instrumentation in Flink pipelines. Create one instance per pipeline:
  * <pre>{@code
- * Faro faro = new Faro("my-pipeline-id", sink);
+ * FaroFlink faro = new FaroFlink("my-pipeline-id", sink);
  *
  * stream.process(faro.trace(OperatorType.MAP, myFn, config)).uid("my-op");
  * keyedStream.process(faro.keyedTrace(OperatorType.AGG, myKeyedFn, config)).uid("my-keyed-op");
@@ -24,9 +24,9 @@ import org.apache.flink.util.OutputTag;
  * {@code .process()}, not on the stream before it. Wrong placement sets the UID on the upstream
  * operator; the adapter's UID validation in {@code open()} will catch it at runtime.
  */
-public final class Faro extends FaroBase {
+public final class FaroFlink extends FaroBase {
 
-    public Faro(String pipelineId, CaptureEventSinkFactory sinkFactory) {
+    public FaroFlink(String pipelineId, CaptureEventSinkFactory sinkFactory) {
         super(pipelineId, sinkFactory);
     }
 

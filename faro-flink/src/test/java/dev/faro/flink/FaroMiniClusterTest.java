@@ -64,7 +64,7 @@ class FaroMiniClusterTest {
         FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
+        FaroFlink faro = new FaroFlink(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -109,7 +109,7 @@ class FaroMiniClusterTest {
         FaroConfig<String> config = FaroConfig.<String>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
+        FaroFlink faro = new FaroFlink(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
@@ -134,7 +134,7 @@ class FaroMiniClusterTest {
         FaroConfig<TimestampedEvent> config = FaroConfig.<TimestampedEvent>builder()
                 .features("feature-a")
                 .build();
-        Faro faro = new Faro(PIPELINE_ID, COLLECTING_FACTORY);
+        FaroFlink faro = new FaroFlink(PIPELINE_ID, COLLECTING_FACTORY);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);

@@ -7,9 +7,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 
-/**
- * Faro observability decorator for Flink {@link ProcessFunction}.
- */
 public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT> {
 
     private final ProcessFunction<IN, OUT> delegate;
@@ -33,7 +30,8 @@ public final class FaroProcessFunction<IN, OUT> extends ProcessFunction<IN, OUT>
 
     @Override
     public void processElement(IN value, Context ctx, Collector<OUT> out) throws Exception {
-        base.processElement(value, ctx.timestamp(), ctx.timerService(), () -> delegate.processElement(value, ctx, out));
+        base.processElement(value, ctx.timestamp(), ctx.timerService(), out,
+                capturing -> delegate.processElement(value, ctx, capturing));
     }
 
     @Override

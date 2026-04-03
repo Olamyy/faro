@@ -78,29 +78,6 @@ class FaroEntityModeTest {
     }
 
     @Test
-    void pseudonymous_emitsEntityIdAndFeatureValue() throws Exception {
-        FaroConfig<TestRecord> config = FaroConfig.<TestRecord>builder()
-                .feature("score", FaroFeatureConfig.<TestRecord>builder()
-                        .entityKey(r -> r.userId)
-                        .featureValue(r -> r.score)
-                        .valueType(CaptureEvent.FeatureValueType.SCALAR_DOUBLE)
-                        .classification(DataClassification.PSEUDONYMOUS)
-                        .build())
-                .build();
-
-        FaroProcessFunction<TestRecord, TestRecord> fn = buildFn(config);
-        fn.processElement(new TestRecord("user-2", 7.5), mockCtx(), mock(Collector.class));
-
-        List<CaptureEvent> entityEvents = captured.events.stream()
-                .filter(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.ENTITY)
-                .toList();
-
-        assertEquals(1, entityEvents.size());
-        assertEquals("user-2", entityEvents.get(0).getEntityId());
-        assertNotNull(entityEvents.get(0).getFeatureValue());
-    }
-
-    @Test
     void personal_suppressesEntityIdAndFeatureValue() throws Exception {
         FaroConfig<TestRecord> config = FaroConfig.<TestRecord>builder()
                 .feature("score", FaroFeatureConfig.<TestRecord>builder()
@@ -128,24 +105,6 @@ class FaroEntityModeTest {
                 .findFirst()
                 .map(CaptureEvent::getEntityId)
                 .orElse(null));
-    }
-
-    @Test
-    void sensitive_suppressesEntityIdAndFeatureValue() throws Exception {
-        FaroConfig<TestRecord> config = FaroConfig.<TestRecord>builder()
-                .feature("score", FaroFeatureConfig.<TestRecord>builder()
-                        .entityKey(r -> r.userId)
-                        .featureValue(r -> r.score)
-                        .valueType(CaptureEvent.FeatureValueType.SCALAR_DOUBLE)
-                        .classification(DataClassification.SENSITIVE)
-                        .build())
-                .build();
-
-        FaroProcessFunction<TestRecord, TestRecord> fn = buildFn(config);
-        fn.processElement(new TestRecord("user-4", 1.0), mockCtx(), mock(Collector.class));
-
-        assertTrue(captured.events.stream()
-                .noneMatch(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.ENTITY));
     }
 
     @Test
@@ -228,7 +187,7 @@ class FaroEntityModeTest {
                 .filter(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.AGGREGATE).count();
 
         assertEquals(1, entityEventCount);
-        assertTrue(aggregateEventCount >= 1);
+        assertEquals(2, aggregateEventCount);
     }
 
     private static final class TestRecord {

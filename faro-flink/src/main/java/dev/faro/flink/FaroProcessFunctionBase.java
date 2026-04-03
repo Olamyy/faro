@@ -11,6 +11,7 @@ import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
+import org.apache.flink.util.Collector;
 
 import javax.annotation.Nonnull;
 import java.io.Serial;
@@ -23,10 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Shared capture state and flush logic for {@link FaroProcessFunction} and
- * {@link FaroKeyedProcessFunction}.
- *
- * <p>Valid operator types are {@code FILTER}, {@code MAP}, and {@code AGG}. Any other value
+ * Valid operator types are {@code FILTER}, {@code MAP}, and {@code AGG}. Any other value
  * throws {@link IllegalArgumentException} at construction time.
  *
  * <p>A stable operator UID must be set via {@code operator.uid("...")}. {@link #open} throws
@@ -60,8 +58,7 @@ class FaroProcessFunctionBase implements Serializable {
     transient volatile long lastWatermarkMs;
 
     /**
-     * Optional timer counter wired by {@link FaroKeyedProcessFunction}. When non-null,
-     * {@link #timerFiredCountSnapshot()} returns and resets this counter.
+     * Optional timer counter wired by {@link FaroKeyedProcessFunction}.
      */
     transient AtomicLong timerCounterRef;
 
@@ -115,20 +112,19 @@ class FaroProcessFunctionBase implements Serializable {
         return owner.getRuntimeContext();
     }
 
-    <IN> void processElement(IN record, Long timestamp, TimerService timerService,
-            ThrowingRunnable delegateCall) throws Exception {
+    <IN, OUT> void processElement(IN record, Long timestamp, TimerService timerService,
+            Collector<OUT> out, ThrowingCollectorRunnable<OUT> delegateCall) throws Exception {
         counters.input.incrementAndGet();
         long ts = timestamp != null ? timestamp : Long.MIN_VALUE;
         long wm = timerService != null ? timerService.currentWatermark() : Long.MIN_VALUE;
         recordObserved(ts, wm);
-        delegateCall.run();
-        counters.output.incrementAndGet();
-        emitEntityEvents(record, ts);
+        CapturingCollector<IN, OUT> capturing = new CapturingCollector<>(out, record, ts, this);
+        delegateCall.run(capturing);
     }
 
     @FunctionalInterface
-    interface ThrowingRunnable {
-        void run() throws Exception;
+    interface ThrowingCollectorRunnable<OUT> {
+        void run(Collector<OUT> out) throws Exception;
     }
 
     void recordObserved(long contextTimestamp, long contextWatermark) {
@@ -290,5 +286,31 @@ class FaroProcessFunctionBase implements Serializable {
         byte[] bytes = new byte[8];
         ThreadLocalRandom.current().nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
+    }
+
+    private static final class CapturingCollector<IN, OUT> implements Collector<OUT> {
+        private final Collector<OUT> delegate;
+        private final IN record;
+        private final long timestampMs;
+        private final FaroProcessFunctionBase base;
+
+        CapturingCollector(Collector<OUT> delegate, IN record, long timestampMs, FaroProcessFunctionBase base) {
+            this.delegate = delegate;
+            this.record = record;
+            this.timestampMs = timestampMs;
+            this.base = base;
+        }
+
+        @Override
+        public void collect(OUT element) {
+            base.counters.output.incrementAndGet();
+            base.emitEntityEvents(record, timestampMs);
+            delegate.collect(element);
+        }
+
+        @Override
+        public void close() {
+            delegate.close();
+        }
     }
 }

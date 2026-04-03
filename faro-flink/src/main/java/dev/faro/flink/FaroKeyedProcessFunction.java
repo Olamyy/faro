@@ -10,9 +10,7 @@ import org.apache.flink.util.Collector;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Faro observability decorator for Flink {@link KeyedProcessFunction}.
- *
- * <p>Captures {@code timer_fired_count}: the number of {@link #onTimer} callbacks fired
+ * Captures {@code timer_fired_count}: the number of {@link #onTimer} callbacks fired
  * since the last flush, reset on each flush.
  */
 public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFunction<KEY, IN, OUT> {
@@ -42,7 +40,8 @@ public final class FaroKeyedProcessFunction<KEY, IN, OUT> extends KeyedProcessFu
 
     @Override
     public void processElement(IN value, Context ctx, Collector<OUT> out) throws Exception {
-        base.processElement(value, ctx.timestamp(), ctx.timerService(), () -> delegate.processElement(value, ctx, out));
+        base.processElement(value, ctx.timestamp(), ctx.timerService(), out,
+                capturing -> delegate.processElement(value, ctx, capturing));
     }
 
     @Override

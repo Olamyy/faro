@@ -4,7 +4,7 @@ import dev.faro.core.CaptureEvent;
 import dev.faro.core.DataClassification;
 import dev.faro.core.AsyncCaptureEventSink;
 import dev.faro.core.CaptureEventSinkFactory;
-import dev.faro.flink.Faro;
+import dev.faro.flink.FaroFlink;
 import dev.faro.core.FaroConfig;
 import dev.faro.core.FaroFeatureConfig;
 import dev.faro.flink.FaroSink;
@@ -28,15 +28,6 @@ import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.Random;
 
-/**
- * Sensor pipeline demonstrating ENTITY-mode capture alongside the standard AGGREGATE capture.
- *
- * <p>The {@code temperature} feature is configured with {@code deviceId} as the entity key
- * and {@link DataClassification#NON_PERSONAL}, so each window fires both an AGGREGATE event
- * (one per feature per window) and an ENTITY event carrying the device's temperature sum and
- * its identifier. The {@code window_throughput} feature is AGGREGATE-only to show the two
- * modes coexisting on the same operator.
- */
 final class EntitySensorPipeline {
 
     private static final String[] DEVICES = {"device-A", "device-B", "device-C", "device-D"};
@@ -45,8 +36,8 @@ final class EntitySensorPipeline {
 
     private EntitySensorPipeline() {}
 
-    static void execute(CaptureEventSinkFactory innerFactory, String jobName) throws Exception {
-        execute(innerFactory, jobName, "sensor-pipeline-entity-e2e");
+    static void execute(CaptureEventSinkFactory innerFactory) throws Exception {
+        execute(innerFactory, "sensor-pipeline-entity-stdout", "sensor-pipeline-entity-e2e");
     }
 
     static void execute(CaptureEventSinkFactory innerFactory, String jobName, String pipelineId) throws Exception {
@@ -62,7 +53,7 @@ final class EntitySensorPipeline {
 
         CaptureEventSinkFactory sinkFactory =
                 () -> new AsyncCaptureEventSink(innerFactory.create(), 1_000);
-        Faro faro = new Faro(pipelineId, sinkFactory);
+        FaroFlink faro = new FaroFlink(pipelineId, sinkFactory);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
