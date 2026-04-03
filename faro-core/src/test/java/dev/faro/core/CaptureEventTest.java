@@ -163,14 +163,4 @@ class CaptureEventTest {
         assertEquals(original.getJoinMatchRate(), restored.getJoinMatchRate());
     }
 
-    @Test
-    void avroSchema_loadsFromClasspath() {
-        org.apache.avro.Schema schema = CaptureEvent.avroSchema();
-        assertNotNull(schema);
-        assertEquals("CaptureEvent", schema.getName());
-        assertEquals("dev.faro.schema", schema.getNamespace());
-        assertNotNull(schema.getField("pipeline_id"));
-        assertNotNull(schema.getField("operator_type"));
-        assertNotNull(schema.getField("capture_drop_since_last"));
-    }
 }

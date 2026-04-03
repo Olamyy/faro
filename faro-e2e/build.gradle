@@ -5,6 +5,9 @@ plugins {
 
 ext {
     flinkVersion = '1.18.0'
+    sparkVersion = '3.5.0'
+    scalaVersion = '2.12'
+    deltaVersion = '3.3.1'
 }
 
 configurations.configureEach {
@@ -14,8 +17,12 @@ configurations.configureEach {
     resolutionStrategy.force 'at.yawk.lz4:lz4-java:1.10.4'
 }
 
+
 dependencies {
     implementation project(':faro-flink')
+    implementation project(':faro-spark')
+    implementation "org.apache.spark:spark-sql_${scalaVersion}:${sparkVersion}"
+    implementation "io.delta:delta-spark_${scalaVersion}:${deltaVersion}"
 
     implementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
     implementation "org.apache.flink:flink-java:${flinkVersion}"
@@ -23,10 +30,32 @@ dependencies {
     implementation "org.apache.flink:flink-connector-datagen:${flinkVersion}"
 }
 
+task runSparkSensorJob(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.faro.e2e.SparkSensorJob'
+    jvmArgs(
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+        '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+        '--add-opens=java.base/java.io=ALL-UNNAMED',
+        '--add-opens=java.base/java.net=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+        '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+        '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens=java.base/sun.nio.cs=ALL-UNNAMED',
+        '--add-opens=java.base/sun.security.action=ALL-UNNAMED',
+        '--add-opens=java.base/sun.util.calendar=ALL-UNNAMED',
+        '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+    )
+}
+
 shadowJar {
     archiveBaseName = 'faro-e2e'
     archiveClassifier = ''
     archiveVersion = ''
+    zip64 = true
 
     manifest {
         attributes 'Main-Class': 'dev.faro.e2e.StdoutSensorJob'
