@@ -131,7 +131,7 @@ the query layer.
 Track cardinality and watermark health for a window operator. No per-entity data is captured.
 
 ```java
-Faro faro = new Faro("order-pipeline",
+FaroFlink faro = new FaroFlink("order-pipeline",
     AsyncCaptureEventSink.wrap(HttpCaptureEventSink.factory("http://faro-api:9000/ingest"), 1000));
 
 // Register features in AGGREGATE mode only.
@@ -168,7 +168,7 @@ Capture the feature value for each entity at processing time. Useful for debuggi
 and auditing what a specific user or device saw.
 
 ```java
-Faro faro = new Faro("user-feature-pipeline",
+FaroFlink faro = new FaroFlink("user-feature-pipeline",
     AsyncCaptureEventSink.wrap(HttpCaptureEventSink.factory("http://faro-api:9000/ingest"), 1000));
 
 FaroConfig<PurchaseEvent> config = FaroConfig.<PurchaseEvent>builder()

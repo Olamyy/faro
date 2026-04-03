@@ -3,7 +3,6 @@ package dev.faro.spark;
 import dev.faro.core.CaptureEvent;
 import dev.faro.core.CaptureEventSink;
 import dev.faro.core.CaptureEventSinkFactory;
-import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
@@ -14,11 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Writes capture events to a Delta table at {@code tablePath}.
+ * Events are buffered in memory and written in a single Delta transaction on each
+ * {@link #flush()} call. In batch mode, {@link #close()} triggers the flush. In Structured
+ * Streaming, call {@link #flush()} at the end of each {@code foreachBatch} invocation.
  *
- * <p>Events are buffered in memory and written in a single Delta transaction when
- * {@link #close()} is called. The table is created on first write; subsequent writes append.
- * The {@code SparkSession} must be configured with the Delta extensions:
+ * <p>The {@code SparkSession} must be configured with the Delta extensions:
  * <pre>{@code
  * SparkSession.builder()
  *     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
@@ -89,60 +88,68 @@ public final class DeltaCaptureEventSink implements CaptureEventSink {
         buffer.add(event);
     }
 
-    @Override
-    public void close() {
+    public void flush() {
         if (buffer.isEmpty()) return;
         List<Row> rows = new ArrayList<>(buffer.size());
         for (CaptureEvent e : buffer) {
-            rows.add(RowFactory.create(
-                    e.getSchemaVersion(),
-                    e.getPipelineId(),
-                    e.getOperatorId(),
-                    enumName(e.getOperatorType()),
-                    e.getFeatureName(),
-                    enumName(e.getCaptureMode()),
-                    e.getEventTime(),
-                    e.getEventTimeMin(),
-                    e.getProcessingTime(),
-                    e.getWatermark(),
-                    e.getWindowStart(),
-                    e.getWindowEnd(),
-                    e.getLateEventCount(),
-                    enumName(e.getLateTrackingMode()),
-                    e.getInputCardinality(),
-                    e.getOutputCardinality(),
-                    e.getEmitIntervalMs(),
-                    e.getTimerFiredCount(),
-                    e.getAsyncPendingCount(),
-                    e.getPatternMatchCount(),
-                    enumName(e.getJoinInputSide()),
-                    e.getJoinLowerBoundMs(),
-                    e.getJoinUpperBoundMs(),
-                    e.getJoinMatchRate(),
-                    e.getValueCount(),
-                    e.getValueMin(),
-                    e.getValueMax(),
-                    e.getValueMean(),
-                    e.getValueP50(),
-                    e.getValueP95(),
-                    e.getNullCount(),
-                    e.getEntityId(),
-                    e.getFeatureValue(),
-                    enumName(e.getFeatureValueType()),
-                    e.getUpstreamSource(),
-                    e.getUpstreamSystem(),
-                    e.getTraceId(),
-                    e.getSpanId(),
-                    e.getParentSpanId(),
-                    e.isCaptureDropSinceLast()
-            ));
+            rows.add(toRow(e));
         }
-        Dataset<Row> df = spark.createDataFrame(rows, SCHEMA);
-        df.write()
+        spark.createDataFrame(rows, SCHEMA)
+                .write()
                 .format("delta")
                 .mode("append")
                 .save(tablePath);
         buffer.clear();
+    }
+
+    @Override
+    public void close() {
+        flush();
+    }
+
+    private static Row toRow(CaptureEvent e) {
+        return RowFactory.create(
+                e.getSchemaVersion(),
+                e.getPipelineId(),
+                e.getOperatorId(),
+                enumName(e.getOperatorType()),
+                e.getFeatureName(),
+                enumName(e.getCaptureMode()),
+                e.getEventTime(),
+                e.getEventTimeMin(),
+                e.getProcessingTime(),
+                e.getWatermark(),
+                e.getWindowStart(),
+                e.getWindowEnd(),
+                e.getLateEventCount(),
+                enumName(e.getLateTrackingMode()),
+                e.getInputCardinality(),
+                e.getOutputCardinality(),
+                e.getEmitIntervalMs(),
+                e.getTimerFiredCount(),
+                e.getAsyncPendingCount(),
+                e.getPatternMatchCount(),
+                enumName(e.getJoinInputSide()),
+                e.getJoinLowerBoundMs(),
+                e.getJoinUpperBoundMs(),
+                e.getJoinMatchRate(),
+                e.getValueCount(),
+                e.getValueMin(),
+                e.getValueMax(),
+                e.getValueMean(),
+                e.getValueP50(),
+                e.getValueP95(),
+                e.getNullCount(),
+                e.getEntityId(),
+                e.getFeatureValue(),
+                enumName(e.getFeatureValueType()),
+                e.getUpstreamSource(),
+                e.getUpstreamSystem(),
+                e.getTraceId(),
+                e.getSpanId(),
+                e.getParentSpanId(),
+                e.isCaptureDropSinceLast()
+        );
     }
 
     private static String enumName(Enum<?> e) {

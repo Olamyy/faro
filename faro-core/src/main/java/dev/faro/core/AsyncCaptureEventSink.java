@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Bounded capture buffer that drains to a delegate {@link CaptureEventSink} on a background
  * thread. On overflow the oldest queued event is discarded and {@link #droppedSinceLastFlush()}
  * is set, allowing the next emitted capture event to carry {@code capture_drop_since_last = true}.
- *
  */
 public final class AsyncCaptureEventSink implements CaptureEventSink {
 

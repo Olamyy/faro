@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # Faro Spark E2E
 # MAGIC
-# MAGIC Demonstrates `SparkFaro` with `DeltaCaptureEventSink` on a Databricks cluster.
+# MAGIC Demonstrates `FaroSpark` with `DeltaCaptureEventSink` on a Databricks cluster.
 # MAGIC
 # MAGIC **Prerequisites:**
 # MAGIC 1. Upload `faro-spark/build/libs/faro-spark-databricks.jar` to your cluster as a library
@@ -13,7 +13,7 @@
 
 # MAGIC %scala
 # MAGIC
-# MAGIC import dev.faro.spark.{SparkFaro, DeltaCaptureEventSink}
+# MAGIC import dev.faro.spark.{FaroSpark, DeltaCaptureEventSink}
 # MAGIC import dev.faro.core.{FaroConfig, FaroFeatureConfig, CaptureEvent, DataClassification}
 # MAGIC import org.apache.spark.api.java.function.FilterFunction
 # MAGIC import org.apache.spark.sql.Dataset
@@ -38,7 +38,7 @@
 # MAGIC val rows = (0 until 100).map(_ => devices(rng.nextInt(devices.length))).toSeq
 # MAGIC val raw: Dataset[String] = spark.createDataset(rows)
 # MAGIC
-# MAGIC val faro = new SparkFaro("spark-sensor-pipeline", DeltaCaptureEventSink.factory(spark, TABLE_PATH))
+# MAGIC val faro = new FaroSpark("spark-sensor-pipeline", DeltaCaptureEventSink.factory(spark, TABLE_PATH))
 # MAGIC
 # MAGIC val filtered = faro.trace(
 # MAGIC   "filter.short",

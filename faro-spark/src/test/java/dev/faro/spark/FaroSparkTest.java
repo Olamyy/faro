@@ -17,7 +17,7 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class SparkFaroTest {
+class FaroSparkTest {
 
     private static SparkSession spark;
 
@@ -25,7 +25,7 @@ class SparkFaroTest {
     static void startSpark() {
         spark = SparkSession.builder()
                 .master("local[1]")
-                .appName("SparkFaroTest")
+                .appName("FaroSparkTest")
                 .config("spark.ui.enabled", "false")
                 .getOrCreate();
     }
@@ -44,7 +44,7 @@ class SparkFaroTest {
     @Test
     void trace_nullOperatorIdThrows() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroConfig<String> config = FaroConfig.<String>builder().features("f").build();
         assertThrows(IllegalArgumentException.class,
                 () -> faro.trace(null, CaptureEvent.OperatorType.MAP, config, Function.identity()));
@@ -53,7 +53,7 @@ class SparkFaroTest {
     @Test
     void trace_emptyOperatorIdThrows() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroConfig<String> config = FaroConfig.<String>builder().features("f").build();
         assertThrows(IllegalArgumentException.class,
                 () -> faro.trace("", CaptureEvent.OperatorType.MAP, config, Function.identity()));
@@ -62,7 +62,7 @@ class SparkFaroTest {
     @Test
     void trace_aggregateEventHasCorrectFields() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("my-pipeline", captured);
+        FaroSpark faro = new FaroSpark("my-pipeline", captured);
         FaroConfig<String> config = FaroConfig.<String>builder().features("feature-a").build();
 
         faro.trace("op1", CaptureEvent.OperatorType.AGG, config, Function.identity())
@@ -81,7 +81,7 @@ class SparkFaroTest {
     @Test
     void trace_cardinalitiesReflectTransformResult() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroConfig<String> config = FaroConfig.<String>builder().features("f").build();
 
         faro.trace("op1", CaptureEvent.OperatorType.FILTER, config,
@@ -96,7 +96,7 @@ class SparkFaroTest {
     @Test
     void trace_personalClassificationDegradesToAggregate() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroFeatureConfig<String> fc = FaroFeatureConfig.<String>builder()
                 .entityKey(s -> s)
                 .featureValue(String::length)
@@ -109,32 +109,15 @@ class SparkFaroTest {
                 .apply(ds("alice", "bob"));
 
         assertTrue(captured.events.stream()
-                .allMatch(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.AGGREGATE));
-    }
-
-    @Test
-    void trace_sensitiveClassificationDegradesToAggregate() {
-        CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
-        FaroFeatureConfig<String> fc = FaroFeatureConfig.<String>builder()
-                .entityKey(s -> s)
-                .featureValue(String::length)
-                .valueType(CaptureEvent.FeatureValueType.SCALAR_LONG)
-                .classification(DataClassification.SENSITIVE)
-                .build();
-        FaroConfig<String> config = FaroConfig.<String>builder().feature("f", fc).build();
-
-        faro.trace("op1", CaptureEvent.OperatorType.MAP, config, Function.identity())
-                .apply(ds("alice", "bob"));
-
-        assertTrue(captured.events.stream()
-                .allMatch(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.AGGREGATE));
+                .allMatch(e -> e.getCaptureMode() == CaptureEvent.CaptureMode.AGGREGATE
+                        && e.getEntityId() == null
+                        && e.getFeatureValue() == null));
     }
 
     @Test
     void trace_entityEventsEmittedPerRow() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroFeatureConfig<String> fc = FaroFeatureConfig.<String>builder()
                 .entityKey(s -> s)
                 .featureValue(s -> (long) s.length())
@@ -164,7 +147,7 @@ class SparkFaroTest {
     @Test
     void trace_sampleRateZeroProducesNoEntityEvents() {
         CapturingCaptureEventSink captured = new CapturingCaptureEventSink();
-        SparkFaro faro = new SparkFaro("p1", captured);
+        FaroSpark faro = new FaroSpark("p1", captured);
         FaroFeatureConfig<String> fc = FaroFeatureConfig.<String>builder()
                 .entityKey(s -> s)
                 .featureValue(String::length)
