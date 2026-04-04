@@ -1,30 +1,31 @@
 # Faro
 
-Faro is the simplest feature observability layer for streaming engines you can think of.
-It's entirely passive and non-intrusive. You wrap your existing operators with Faro's
-decorators, configure which features to track, and capture events start flowing alongside
-your data. You can route those events to wherever you already send observability data:
+Faro adds runtime observability to your Flink and Spark pipelines. It captures per-operator
+cardinality, watermark lag, per-entity feature values, and automatic violation detection
+without changing your pipeline logic.
+
+You can route capture events to wherever you already send observability data,
 <a href="https://grafana.com" target="_blank">Grafana</a>,
-<a href="https://lightstep.com" target="_blank">Lightstep</a>,
+<a href="https://newrelic.com" target="_blank">New Relic</a>,
 <a href="https://www.honeycomb.io" target="_blank">Honeycomb</a>,
-or your existing Kafka topics. 
+or your existing Kafka topics.
 
 > [!NOTE]
-> 
-> If you don't have a monitoring stack, faro includes a `faro-api` REST service that provides a Parquet-backed storage and a query layer.
+>
+> If you don't have a monitoring stack, faro includes a `faro-api` REST service with
+> Parquet-backed storage, violation detection, and a ten-endpoint query layer.
 
 *Faro exists because feature pipelines are production infrastructure and deserve the same observability as your API servers.*
-
-**Apache Flink** is the only engine with an adapter today. Spark Structured Streaming and
-Kafka Streams adapters are on the roadmap.
 
 ## What problem does it solve?
 
 Feature pipeline observability today happens at rest. You query your data warehouse, look at
-model metrics, or wait for a downstream alert. When a feature value is off, you have almost no visibility into
-when the feature went bad, which operator dropped records, or what value a specific entity
-had at processing time. The gap is in the pipeline itself. Streaming engines process millions of records per second and
-emit nothing observable by default. You find out something is wrong when:
+model metrics, or wait for a downstream alert. When a feature value is off, you have almost
+no visibility into when the feature went bad, which operator dropped records, or what value
+a specific entity had at processing time.
+
+Streaming engines process millions of records per second and emit nothing observable by
+default. You find out something is wrong when:
 
 - A downstream model starts producing bad predictions.
 - A user reports that their feature value is stale or missing.
@@ -39,7 +40,8 @@ Faro provides adapters for multiple streaming engines. Pick the one that matches
 
 ### Apache Flink (Java)
 
-Requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly`, so it depends on your existing flink runtime without bundling Flink by itself.
+Requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly` so it
+depends on your existing runtime without bundling Flink.
 
 ```gradle
 dependencies {
@@ -49,7 +51,9 @@ dependencies {
 
 ### Apache Spark Structured Streaming (Java/Scala)
 
-Requires **Spark 3.5.x** and **Scala 2.13**. `faro-spark` declares Spark as `compileOnly`. A Databricks-compatible JAR (`faro-spark-databricks.jar`) is also published for cluster attachment.
+Requires **Spark 3.5.x** and **Scala 2.13**. `faro-spark` declares Spark as `compileOnly`. A
+Databricks-compatible JAR (`faro-spark-databricks.jar`) is also published for cluster
+attachment.
 
 ```gradle
 dependencies {
@@ -57,7 +61,7 @@ dependencies {
 }
 ```
 
-### faro-api (optional)
+### Query API (optional, Python)
 
 If you don't have an existing monitoring stack:
 
@@ -70,7 +74,10 @@ docker run -p 9000:9000 \
 
 ## Comparison
 
-Every tool in this space can surface *some* feature health signal, but they all require you to emit custom metrics, write alerting rules, or run additional infrastructure. Faro is different: it captures pipeline internals passively at the operator level and requires no changes to your pipeline logic or data schema.
+Every tool in this space can surface *some* feature health signal, but they all require you
+to emit custom metrics, write alerting rules, or run additional infrastructure. Faro captures
+pipeline internals passively at the operator level and requires no changes to your pipeline
+logic or data schema.
 
 **Observability tools**
 
@@ -80,7 +87,7 @@ Every tool in this space can surface *some* feature health signal, but they all 
 | Per-entity feature value at processing time | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Freshness, drift, null-rate, cardinality violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
 | No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ |
-| No additional infrastructure required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
+| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
 
 **Feature stores**
 
@@ -90,37 +97,35 @@ Every tool in this space can surface *some* feature health signal, but they all 
 | Per-entity feature value at processing time | ✓ | serving store only | serving store only | serving store only | serving store only | serving store only |
 | Freshness, drift, null-rate, cardinality violations | ✓ | partial | partial | ✓ | ✗ | partial |
 | No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| No additional infrastructure required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
+| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
 
-## High-level operations
+## How it works
 
-Every instrumented operator emits two kinds of events:
+Every instrumented operator emits two kinds of events.
 
 **AGGREGATE events** fire on each flush (window close, periodic timer). They capture input
 and output cardinality, watermark, event-time range, late event count, and whether any
 observability events were dropped since last flush.
 
-**ENTITY events** fire per record, when you configure a feature with an entity key and value
+**ENTITY events** fire per record when you configure a feature with an entity key and value
 extractor. They capture the entity ID, the raw feature value at processing time, and event
-time. Features classified as `PERSONAL` or `SENSITIVE` are automatically suppressed. They
-degrade to AGGREGATE mode and no entity data is ever emitted.
+time. Features classified as `PERSONAL` or `SENSITIVE` are automatically suppressed and
+degrade to AGGREGATE mode so no entity data is ever emitted.
 
-A *pipeline* is a named unit containing one or more instrumented *operators*. Each operator
-must have a stable UID (via `.uid("...")` in Flink) so Faro can correlate events across
-restarts. Events flow from operators into a *sink*, which routes them to your destination of
-choice.
+A *pipeline* is a named unit containing one or more instrumented *operators*. Events flow
+from operators into a *sink*, which routes them to your destination of choice.
 
 ## Components
 
-| Module | Description                                                                                                                                                                                                                                              |
-|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `faro-core` | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies. |
-| `faro-flink` | Flink 1.18.x adapter that wraps operators and sink implementations. |
-| `faro-spark` | Spark 3.5.x / Scala 2.13 adapter. Also published as a Databricks-compatible fat JAR. |
-| `faro-api` | FastAPI service with ten REST endpoints: ingest, pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. Backed by DuckDB over Parquet. |
-| `faro-e2e` | Runnable demo jobs covering every sink variant and both AGGREGATE and ENTITY modes. |
+| Module      | Description |
+|-------------|-------------|
+| faro-core   | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies. |
+| faro-flink  | Flink 1.18.x adapter that wraps operators and sink implementations. |
+| faro-spark  | Spark 3.5.x / Scala 2.13 adapter. Also published as a Databricks-compatible fat JAR. |
+| faro-api    | FastAPI service with ten REST endpoints covering ingest, pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. Backed by DuckDB over Parquet. |
+| faro-e2e    | Runnable demo jobs for Flink and Spark covering every sink variant and both AGGREGATE and ENTITY modes. |
 
-**Sink options:**
+**Sink options**
 
 | Sink | Adapter | When to use |
 |------|---------|-------------|
@@ -129,16 +134,16 @@ choice.
 | `HttpCaptureEventSink` | FLINK, DATABRICKS | You want faro-api, or any webhook receiver |
 | `OtelCaptureEventSink` | FLINK, DATABRICKS | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
 | `DeltaCaptureEventSink` | DATABRICKS | You're on Spark or Databricks and want events in a Delta table |
-| `AsyncCaptureEventSink` | FLINK, DATABRICKS | Wraps any of the above. Decouples capture from operator threads |
+| `AsyncCaptureEventSink` | FLINK, DATABRICKS | Wraps any event-driven sink above. Decouples capture from operator threads |
 
 All sinks are fire-and-forget. Failures are logged and never propagate to your pipeline.
 `AsyncCaptureEventSink` additionally tracks overflow. When the in-memory ring buffer fills
 up, it sets a `capture_drop_since_last` flag on the next flush event so you can see it in
 the query layer.
 
-## Example
+## Examples
 
-### Aggregate mode
+### Flink, aggregate mode
 
 Track cardinality and watermark health for a window operator. No per-entity data is captured.
 
@@ -146,7 +151,6 @@ Track cardinality and watermark health for a window operator. No per-entity data
 FaroFlink faro = new FaroFlink("order-pipeline",
     AsyncCaptureEventSink.wrap(HttpCaptureEventSink.factory("http://faro-api:9000/ingest"), 1000));
 
-// Register features in AGGREGATE mode only.
 FaroConfig<OrderEvent> config = FaroConfig.<OrderEvent>builder()
     .features("order_count", "revenue_7d")
     .build();
@@ -157,8 +161,6 @@ DataStream<OrderSummary> output = input
     .process(faro.windowTrace(new OrderAggFn(), config))
     .uid("order-agg-window");
 ```
-
-Query pipeline and feature health:
 
 ```bash
 # Is the pipeline flowing? When did each operator last emit?
@@ -174,10 +176,10 @@ curl "http://localhost:9000/features/order_count/health?pipeline_id=order-pipeli
 curl "http://localhost:9000/violations?pipeline_id=order-pipeline&severity_gte=HIGH"
 ```
 
-### Entity mode
+### Flink, entity mode
 
-Capture the feature value for each entity at processing time. Useful for debugging model inputs
-and auditing what a specific user or device saw.
+Capture the feature value for each entity at processing time. Useful for debugging model
+inputs and auditing what a specific user or device saw.
 
 ```java
 FaroFlink faro = new FaroFlink("user-feature-pipeline",
@@ -189,7 +191,7 @@ FaroConfig<PurchaseEvent> config = FaroConfig.<PurchaseEvent>builder()
         .featureValue(e -> e.rollingAmount)
         .valueType(CaptureEvent.FeatureValueType.SCALAR_DOUBLE)
         .classification(DataClassification.NON_PERSONAL)
-        .sampleRate(0.1)   // capture entity events for 10% of records
+        .sampleRate(0.1)
         .build())
     .build();
 
@@ -200,8 +202,6 @@ DataStream<FeatureVector> output = input
     .uid("rolling-amount-window");
 ```
 
-Query entity values and distribution stats:
-
 ```bash
 # What value did this user have in the last hour?
 curl "http://localhost:9000/features/purchase_amount_7d/values?pipeline_id=user-feature-pipeline&entity_id=user-42&window=1h"
@@ -210,30 +210,60 @@ curl "http://localhost:9000/features/purchase_amount_7d/values?pipeline_id=user-
 curl "http://localhost:9000/features/purchase_amount_7d/values/summary?pipeline_id=user-feature-pipeline&window=1h"
 ```
 
+### Spark / Databricks, aggregate mode
+
+```java
+FaroStreamingListener listener = new FaroStreamingListener();
+spark.streams().addListener(listener);
+
+FaroSpark faro = new FaroSpark("order-pipeline",
+    DeltaCaptureEventSink.factory(spark, "/mnt/faro/capture-events"))
+    .withStreamingContext("event_time", "window", listener);
+
+FaroConfig<Row> config = FaroConfig.<Row>builder()
+    .features("order_count", "revenue_7d")
+    .build();
+
+input.writeStream()
+    .foreachBatch((batchDf, batchId) -> {
+        faro.trace("order-agg-window", CaptureEvent.OperatorType.AGG, config,
+            ds -> ds.groupBy(window(col("event_time"), "5 minutes"))
+                    .agg(count("*").as("order_count"), sum("amount").as("revenue_7d")))
+            .apply(batchDf);
+    })
+    .start();
+```
+
 ## Roadmap
 
 **Engine adapters**
 
-Flink is the only supported engine today. Spark Structured Streaming and Kafka Streams adapters are planned.
+Flink and Spark Structured Streaming are supported. A Kafka Streams adapter is planned.
 
 **Extended query API**
 
-The current query layer covers cardinality trends, watermark lag, violation detection, entity values, trace lookup, and entity lineage. Planned additions include late-event rate per window, missing window detection, per-window fire-delay distribution, and cross-operator cardinality funnel queries. Cross-operator lag queries are blocked on wiring `parent_span_id` at emit time.
+The current query layer covers cardinality trends, watermark lag, violation detection, entity
+values, trace lookup, and entity lineage. Planned additions include late-event rate per
+window, missing window detection, per-window fire-delay distribution, and cross-operator
+cardinality funnel queries.
 
 **Value-level health checks**
 
-The violation system detects `FRESHNESS`, `MEAN_DRIFT`, `NULL_RATE`, and `CARDINALITY_ANOMALY`. Planned additions include NOT_NULL and RANGE assertions in entity mode, and a Z-score baseline check over a rolling 7-day window.
+The violation system detects `FRESHNESS`, `MEAN_DRIFT`, `NULL_RATE`, and
+`CARDINALITY_ANOMALY`. Planned additions include NOT_NULL and RANGE assertions in entity
+mode, and a Z-score baseline check over a rolling 7-day window.
 
 **Entity mode and lineage**
 
-Per-entity feature lookup and trace-level lineage are shipped. Planned additions include bitemporal indexing and per-entity erasure.
+Per-entity feature lookup and trace-level lineage are shipped. Planned additions include
+bitemporal indexing and per-entity erasure.
 
 **Built-in UI**
 
-A lightweight dashboard served directly by `faro-api` is planned, covering pipeline and feature health at a glance, cardinality and watermark trends over configurable windows, a violations feed, and an entity value explorer. The goal is to give teams without an existing observability stack a usable interface out of the box, with no separate deployment required.
+A lightweight dashboard served directly by `faro-api` is planned, covering pipeline and
+feature health at a glance, cardinality and watermark trends over configurable windows, a
+violations feed, and an entity value explorer.
 
 ---
 
-## License and links
-
-- License: Apache-2.0
+Apache-2.0
