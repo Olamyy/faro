@@ -127,7 +127,7 @@ choice.
 | `StdoutCaptureEventSink` | Local development and testing                                   |
 | `KafkaCaptureEventSink` | You already have Kafka or Redpanda                              |
 | `HttpCaptureEventSink` | You want faro-api, or any webhook receiver                      |
-| `OtelCaptureEventSink` | You already have Grafana, Lightstep, or Honeycomb               |
+| `OtelCaptureEventSink` | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
 | `AsyncCaptureEventSink` | Wraps any of the above. Decouples capture from operator threads |
 
 All sinks are fire-and-forget. Failures are logged and never propagate to your pipeline.
