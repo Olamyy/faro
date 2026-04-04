@@ -11,6 +11,7 @@ from api.main import app
 
 @pytest.fixture()
 def seeded_store(tmp_path):
+    original = cfg.settings.local_path
     cfg.settings.local_path = str(tmp_path)
 
     pipeline_id = "sensor-pipeline-test"
@@ -63,7 +64,7 @@ def seeded_store(tmp_path):
 
     yield pipeline_id
 
-    cfg.settings.local_path = "/var/faro/parquet"
+    cfg.settings.local_path = original
 
 
 def test_feature_health_returns_data(seeded_store):

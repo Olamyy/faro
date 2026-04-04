@@ -18,6 +18,7 @@ _VIOLATION_SCHEMA = pa.schema([
 
 @pytest.fixture()
 def violation_store(tmp_path):
+    original = cfg.settings.local_path
     cfg.settings.local_path = str(tmp_path)
 
     pipeline_id = "pipe-viol"
@@ -36,7 +37,7 @@ def violation_store(tmp_path):
 
     yield pipeline_id
 
-    cfg.settings.local_path = "/var/faro/parquet"
+    cfg.settings.local_path = original
 
 
 def test_violations_returns_all(violation_store):
