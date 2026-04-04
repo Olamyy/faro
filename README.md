@@ -68,7 +68,7 @@ Faro wants to be really simple. It provides more out-of-the-box visibility with 
 |---|---|---|---|---|---|
 | Pipeline-level cardinality & watermark | ✓ | needs custom metrics | needs custom metrics | needs custom metrics | needs custom spans |
 | Per-entity feature value at processing time | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Freshness violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
+| Freshness, drift, null-rate, cardinality violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
 | Zero pipeline changes required | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Works without new infra | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
 
@@ -78,7 +78,7 @@ Faro wants to be really simple. It provides more out-of-the-box visibility with 
 |---|---|---|---|---|---|---|
 | Pipeline-level cardinality & watermark | ✓ | ✗ | ✗ | partial | ✗ | ✗ |
 | Per-entity feature value at processing time | ✓ | serving store only | serving store only | serving store only | serving store only | serving store only |
-| Freshness violations | ✓ | partial | partial | ✓ | ✗ | partial |
+| Freshness, drift, null-rate, cardinality violations | ✓ | partial | partial | ✓ | ✗ | partial |
 | Zero pipeline changes required | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Works without new infra | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
 
@@ -106,7 +106,7 @@ choice.
 |--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `faro-core` | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies.                                                                                                                                                     |
 | `faro-flink` | Flink adapter that wraps operators and sink implementations.                                                                                                                                                                                             |
-| `faro-api` | A FastAPI service that exposes two endpoints. An `/ingest` endpoint that buffers incoming `CaptureEvent`s and flushes them to Parquet, and `/query` layer backed by DuckDB for exploring feature health, pipeline health, entity values, and violations. |
+| `faro-api` | A FastAPI service with ten REST endpoints. An `/ingest` endpoint buffers incoming `CaptureEvent`s and flushes them to Parquet. A query layer backed by DuckDB covers pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. |
 | `faro-e2e` | Runnable demo Flink jobs covering every sink variant and both AGGREGATE and ENTITY modes.                                                                                                                                                                |
 
 **Sink options:**
@@ -206,15 +206,15 @@ Flink is the only supported engine today. Spark Structured Streaming and Kafka S
 
 **Extended query API**
 
-The current query layer covers cardinality trends, watermark lag, freshness violations, and entity values. Planned additions include cardinality drop detection, output/input filter-ratio trends, late-event rate per window, missing window detection, and per-window fire-delay distribution. Cross-operator queries (cardinality funnel, inter-operator lag) are also planned but blocked on wiring `parent_span_id` at emit time.
+The current query layer covers cardinality trends, watermark lag, violation detection, entity values, trace lookup, and entity lineage. Planned additions include late-event rate per window, missing window detection, per-window fire-delay distribution, and cross-operator cardinality funnel queries. Cross-operator lag queries are blocked on wiring `parent_span_id` at emit time.
 
 **Value-level health checks**
 
-The violation system currently detects freshness only. Planned checks include null rate spikes, mean drift, cardinality anomalies (Z-score over a rolling 7-day baseline), and NOT_NULL / RANGE assertions in entity mode.
+The violation system detects `FRESHNESS`, `MEAN_DRIFT`, `NULL_RATE`, and `CARDINALITY_ANOMALY`. Planned additions include NOT_NULL and RANGE assertions in entity mode, and a Z-score baseline check over a rolling 7-day window.
 
 **Entity mode and lineage**
 
-Full entity-level lineage including bitemporal indexing, per-entity erasure, and a hydrated DAG overlay are all scoped for a later phase after the aggregate-mode foundation is proven against real pipelines.
+Per-entity feature lookup and trace-level lineage are shipped. Planned additions include bitemporal indexing and per-entity erasure.
 
 **Built-in UI**
 
