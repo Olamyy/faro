@@ -17,118 +17,353 @@ Or via Docker Compose — see `faro-e2e/docker-compose.yml`.
 | Variable | Default | Description |
 |---|---|---|
 | `FARO_STORAGE_BACKEND` | `local` | `local` or `s3` |
-| `FARO_LOCAL_PATH` | `/var/faro/parquet` | Base directory for Parquet files |
+| `FARO_LOCAL_PATH` | `/var/faro/parquet` | Base directory for Parquet files (local backend) |
 | `FARO_S3_BUCKET` | — | S3 bucket name (required if backend=s3) |
 | `FARO_S3_PREFIX` | `faro/` | Key prefix within the bucket |
-| `FARO_S3_ENDPOINT_URL` | — | Optional custom endpoint (e.g. MinIO) |
+| `FARO_S3_REGION` | `us-east-1` | AWS region |
+| `FARO_S3_ACCESS_KEY_ID` | — | AWS access key |
+| `FARO_S3_SECRET_ACCESS_KEY` | — | AWS secret key |
+| `FARO_S3_ENDPOINT_URL` | — | Custom endpoint (e.g. MinIO) |
 | `FARO_FLUSH_INTERVAL_SECONDS` | `60` | How often the in-memory buffer is flushed to Parquet |
 | `FARO_FLUSH_BUFFER_SIZE` | `1000` | Flush immediately if this many events are buffered |
+| `FARO_DRIFT_THRESHOLD` | `0.20` | Fractional mean change that triggers a `MEAN_DRIFT` violation |
+| `FARO_NULL_RATE_THRESHOLD` | `0.10` | Null fraction that triggers a `NULL_RATE` violation |
+| `FARO_CARDINALITY_DROP_THRESHOLD` | `0.30` | Filter-ratio drop that triggers a `CARDINALITY_ANOMALY` violation |
 
 ## Endpoints
 
-### `POST /ingest`
+### POST /ingest
 
-Accepts a `CaptureEvent` JSON body from `HttpCaptureEventSink`. Always returns `202
-Accepted` — errors are logged but never returned to the caller, consistent with how the
-sink handles failures (it logs and continues).
+Ingest a capture event from `HttpCaptureEventSink`. The event is written to an in-memory
+buffer and flushed to Parquet either on schedule (`FARO_FLUSH_INTERVAL_SECONDS`) or when
+the buffer reaches `FARO_FLUSH_BUFFER_SIZE`.
 
-Events are held in memory and flushed to Parquet in batches, partitioned as:
+**Request body** — `CaptureEvent` (JSON):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pipeline_id` | string | yes | Identifies the Flink pipeline |
+| `operator_id` | string | yes | Flink operator name |
+| `operator_type` | string | yes | e.g. `WINDOW`, `FILTER`, `MAP` |
+| `capture_mode` | `AGGREGATE` \| `ENTITY` | yes | Aggregate row or per-entity row |
+| `processing_time` | ISO-8601 string | yes | Wall-clock time of the capture |
+| `trace_id` | string | yes | Distributed trace ID |
+| `span_id` | string | yes | Span ID within the trace |
+| `input_cardinality` | int | no | Number of input records |
+| `output_cardinality` | int | no | Number of output records |
+| `emit_interval_ms` | int | no | Expected emit interval; used for freshness detection |
+| `capture_drop_since_last` | bool | no | Whether a drop was detected since the last capture |
+| `feature_name` | string | no | Feature associated with this event |
+| `entity_id` | string | no | Entity identifier (ENTITY mode) |
+| `feature_value` | base64 bytes | no | Encoded feature value (ENTITY mode) |
+| `feature_value_type` | string | no | e.g. `SCALAR_DOUBLE`, `SCALAR_LONG` |
+| `event_time` | ISO-8601 string | no | Flink event time |
+| `watermark` | ISO-8601 string | no | Current watermark |
+| `parent_span_id` | string | no | Parent span for trace hierarchy |
+
+**Response** — `{"status": "ok"}`
+
+---
+
+### GET /pipelines
+
+List all pipeline IDs that have stored events.
+
+**Response**:
+
+```json
+{
+  "pipelines": ["pipe-1", "pipe-2"]
+}
+```
+
+---
+
+### GET /pipelines/{pipeline_id}/health
+
+Per-operator cardinality and drop summary for a pipeline.
+
+**Query parameters**:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `window` | `24h` | Time window to aggregate over. Accepts `Nh`, `Nm`, `Nd` |
+| `operator_id` | — | Scope results to a single operator |
+
+**Response** — `PipelineHealthResponse`:
+
+```json
+{
+  "pipeline_id": "pipe-1",
+  "operators": [
+    {
+      "operator_id": "filter-op",
+      "operator_type": "FILTER",
+      "last_seen": "2026-04-04T10:00:00+00:00",
+      "total_input": 50000,
+      "any_drops": false,
+      "filter_ratio": 0.82
+    }
+  ]
+}
+```
+
+`filter_ratio` is `avg(output_cardinality / input_cardinality)` for AGGREGATE events in the window. `null` when input cardinality is always zero.
+
+---
+
+### GET /pipelines/{pipeline_id}/features
+
+List feature names observed for a pipeline.
+
+**Response**:
+
+```json
+{
+  "pipeline_id": "pipe-1",
+  "features": ["temperature", "pressure", "voltage"]
+}
+```
+
+---
+
+### GET /features/{feature_name}/health
+
+Cardinality trend, watermark lag, capture-drop flag, and violation signals for a feature.
+Calling this endpoint also runs violation detection and writes any new violations to storage.
+
+**Query parameters**:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pipeline_id` | — | **Required.** Pipeline to query |
+| `window` | `1h` | Time window. Accepts `Nh`, `Nm`, `Nd` |
+| `compare_to` | — | Compare current window to a prior period, e.g. `24h_ago` |
+| `operator_id` | — | Scope to a single operator |
+| `end_time` | — | ISO-8601 upper bound on `processing_time` |
+
+**Response** — `FeatureHealthResponse`:
+
+```json
+{
+  "feature_name": "temperature",
+  "pipeline_id": "pipe-1",
+  "window": "1h",
+  "cardinality_trend": [
+    {
+      "processing_time": "2026-04-04T10:00:00+00:00",
+      "input_cardinality": 100,
+      "output_cardinality": 82,
+      "filter_ratio": 0.82,
+      "watermark": "2026-04-04T09:59:00+00:00",
+      "capture_drop_since_last": false
+    }
+  ],
+  "watermark_lag_ms": 5432,
+  "capture_drops": false,
+  "emit_interval_ms": 30000,
+  "freshness_violation": false,
+  "comparison": null
+}
+```
+
+`comparison` is populated when `compare_to` is set. `freshness_violation` is `true` when no
+AGGREGATE event has arrived within `emit_interval_ms` of the current time. Violation records
+for `FRESHNESS`, `MEAN_DRIFT`, `NULL_RATE`, and `CARDINALITY_ANOMALY` are written on each
+call when the corresponding threshold is exceeded.
+
+---
+
+### GET /features/{feature_name}/values
+
+Raw entity-level feature values within a time window.
+
+**Query parameters**:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pipeline_id` | — | **Required.** Pipeline to query |
+| `window` | `1h` | Time window. Accepts `Nh`, `Nm`, `Nd` |
+| `entity_id` | — | Filter to a single entity |
+| `limit` | `10` | Maximum rows returned (1–10000) |
+| `capture_mode` | `ENTITY` | `ENTITY`, `AGGREGATE`, or `ALL` |
+| `operator_id` | — | Scope to a single operator |
+
+**Response** — `EntityValuesResponse`:
+
+```json
+{
+  "feature_name": "temperature",
+  "pipeline_id": "pipe-1",
+  "window": "1h",
+  "values": [
+    {
+      "entity_id": "device-7",
+      "feature_value_decoded": 98.6,
+      "feature_value_type": "SCALAR_DOUBLE",
+      "processing_time": "2026-04-04T10:01:00+00:00",
+      "event_time": "2026-04-04T10:00:58+00:00"
+    }
+  ]
+}
+```
+
+`feature_value_decoded` is the numeric value unpacked from the binary `feature_value` field.
+`null` when the raw value is absent or of an unsupported type.
+
+---
+
+### GET /features/{feature_name}/values/summary
+
+Statistical summary of entity feature values within a time window.
+
+**Query parameters**:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pipeline_id` | — | **Required.** Pipeline to query |
+| `window` | `1h` | Time window. Accepts `Nh`, `Nm`, `Nd` |
+
+**Response** — `EntityValueSummary`:
+
+```json
+{
+  "feature_name": "temperature",
+  "pipeline_id": "pipe-1",
+  "window": "1h",
+  "entity_count": 512,
+  "value_min": 36.1,
+  "value_max": 102.4,
+  "value_mean": 72.3,
+  "value_p50": 71.8,
+  "value_p95": 99.1,
+  "null_count": 4
+}
+```
+
+Only ENTITY events with a decodable `feature_value` contribute to the statistics.
+`null_count` counts ENTITY rows where `feature_value` is absent.
+
+---
+
+### GET /violations
+
+Recorded violations with filtering and pagination.
+
+**Query parameters**:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pipeline_id` | — | Filter to a single pipeline |
+| `feature_name` | — | Filter to a single feature |
+| `since` | — | ISO-8601 lower bound on `detected_at` |
+| `severity_gte` | — | Minimum severity: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
+| `violation_type` | — | Filter by type: `FRESHNESS`, `MEAN_DRIFT`, `NULL_RATE`, `CARDINALITY_ANOMALY` |
+| `limit` | `100` | Page size (1–1000) |
+| `offset` | `0` | Page offset |
+
+**Response** — `ViolationsResponse`:
+
+```json
+{
+  "violations": [
+    {
+      "pipeline_id": "pipe-1",
+      "feature_name": "temperature",
+      "violation_type": "NULL_RATE",
+      "detected_at": "2026-04-04T10:05:00+00:00",
+      "severity": "HIGH",
+      "detail": "Feature 'temperature' null rate exceeds threshold"
+    }
+  ],
+  "total": 47
+}
+```
+
+`total` is the total number of rows matching the filters, regardless of `limit`/`offset`.
+Violations are written by `GET /features/{name}/health` when thresholds are exceeded.
+
+---
+
+### GET /traces/{trace_id}
+
+All capture events for a given trace ID, across all pipelines and operators.
+
+**Response** — `TraceResponse`:
+
+```json
+{
+  "trace_id": "abc-123",
+  "events": [
+    {
+      "pipeline_id": "pipe-1",
+      "operator_id": "filter-op",
+      "operator_type": "FILTER",
+      "feature_name": "temperature",
+      "capture_mode": "AGGREGATE",
+      "processing_time": "2026-04-04T10:00:00+00:00",
+      "trace_id": "abc-123",
+      "span_id": "span-1",
+      "parent_span_id": null,
+      "input_cardinality": 100,
+      "output_cardinality": 82
+    }
+  ]
+}
+```
+
+---
+
+### GET /entities/{entity_id}/features
+
+Latest feature value per `(pipeline_id, feature_name)` for a given entity, across all
+pipelines.
+
+**Response** — `EntityFeaturesResponse`:
+
+```json
+{
+  "entity_id": "device-7",
+  "features": [
+    {
+      "pipeline_id": "pipe-1",
+      "feature_name": "temperature",
+      "feature_value_decoded": 98.6,
+      "processing_time": "2026-04-04T10:01:00+00:00"
+    }
+  ]
+}
+```
+
+---
+
+## Violation Detection
+
+Violation detection runs on every `GET /features/{name}/health` call. Four types are
+detected:
+
+| Type | Trigger | Severity |
+|---|---|---|
+| `FRESHNESS` | No AGGREGATE event received within `emit_interval_ms` of now | HIGH |
+| `MEAN_DRIFT` | Mean feature value in current window deviates from prior window by more than `FARO_DRIFT_THRESHOLD` (default 20%) | MEDIUM |
+| `NULL_RATE` | Fraction of ENTITY rows with null `feature_value` exceeds `FARO_NULL_RATE_THRESHOLD` (default 10%) | HIGH |
+| `CARDINALITY_ANOMALY` | Average output/input ratio drops by more than `FARO_CARDINALITY_DROP_THRESHOLD` (default 30%) compared to the prior window | HIGH |
+
+---
+
+## Storage
+
+Events are stored as Parquet files partitioned as:
 
 ```
 {base}/pipeline_id={value}/date={yyyy-MM-dd}/part-{uuid}.parquet
 ```
 
----
-
-### `GET /features/{feature_name}/health`
-
-Returns health signals for a single feature over a time window.
-
-**Query parameters**
-
-| Parameter | Required | Default | Description |
-|---|---|---|---|
-| `pipeline_id` | yes | — | Pipeline to query |
-| `window` | no | `1h` | How far back to look. Accepts `30m`, `1h`, `7d`, etc. |
-| `compare_to` | no | — | Shift the same window back in time for comparison, e.g. `24h_ago` |
-
-**Response fields**
-
-| Field | Description |
-|---|---|
-| `cardinality_trend` | One entry per capture event in the window. Each entry records `input_cardinality`, `output_cardinality`, `watermark`, and `capture_drop_since_last` at that point in time. Use this to spot where records are being dropped or filtered across the pipeline. |
-| `watermark_lag_ms` | How far the pipeline's watermark is behind wall-clock time, in milliseconds. A high value means the pipeline is processing data that is late relative to real time, or has stalled. |
-| `capture_drops` | `true` if any capture event in the window had `capture_drop_since_last = true`. This means the `AsyncCaptureEventSink` ring buffer was full and some observability events were discarded. Note: this is about lost *observability* events, not lost pipeline data. |
-| `freshness_violation` | `true` if no capture event for this feature has arrived in the last `emit_interval_ms * 3`. Indicates the feature has gone silent — the pipeline may have stalled, crashed, or the sink may be failing. |
-| `comparison` | Cardinality stats for the same-length window shifted back by `compare_to`. Useful for comparing today vs yesterday. `null` if `compare_to` was not supplied. |
-
-**What is and is not checked today**
-
-`freshness_violation` is the only active check — it evaluates whether an event arrived
-within the expected window. Everything else (`cardinality_trend`, `watermark_lag_ms`,
-`capture_drops`) is informational: it is stored and returned but does not trigger any
-alert. Value-level checks (`value_mean`, `value_p95`, `null_count`, etc.) are not yet
-implemented.
-
----
-
-### `GET /pipelines/{pipeline_id}/health`
-
-Returns one row per operator in the pipeline, aggregated across all stored events.
-
-**Response fields**
-
-| Field | Description |
-|---|---|
-| `operator_id` | Stable UID set via `.uid("...")` in the Flink job. Consistent across restarts, so you can track the same operator over time. |
-| `operator_type` | The kind of operator: `WINDOW`, `SINK`, `MAP`, `FILTER`, etc. |
-| `last_seen` | `processing_time` of the most recent capture event from this operator. If this timestamp is stale, the operator has stopped emitting. |
-| `total_input` | Sum of `input_cardinality` across all captured intervals. A rough measure of cumulative throughput through this operator. |
-| `any_drops` | `true` if any capture event from this operator ever had `capture_drop_since_last = true`. |
-
----
-
-### `GET /violations`
-
-Returns recorded violations. A violation is written when a health check detects a
-problem — currently only when `GET /features/{name}/health` detects a freshness
-violation.
-
-**Query parameters**
-
-| Parameter | Description |
-|---|---|
-| `pipeline_id` | Filter to one pipeline |
-| `feature_name` | Filter to one feature |
-| `since` | ISO-8601 lower bound on `detected_at` |
-| `severity_gte` | Minimum severity: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
-
-**Response fields**
-
-| Field | Description |
-|---|---|
-| `violation_type` | What kind of problem was detected. Currently only `FRESHNESS`. |
-| `severity` | `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`. Freshness violations are always `HIGH`. |
-| `detected_at` | Wall-clock time the violation was detected — i.e. when the health endpoint was queried and found the feature stale. Not when the pipeline actually went silent. |
-| `detail` | Human-readable description of what triggered the violation. |
-
-**Violation types (phase 4 scope)**
-
-| Type | Meaning |
-|---|---|
-| `FRESHNESS` | No capture event received for the feature within `emit_interval_ms * 3`. The only type currently implemented. |
-
-Value-level violation types (e.g. mean drift, null rate spike, cardinality anomaly) are
-not yet implemented.
-
-## Storage
-
-Events are stored as Parquet files using pyarrow. DuckDB reads them at query time via
-`read_parquet(glob)` — there is no persistent DuckDB database file. Violations are stored
-in a separate `violations/pipeline_id={value}/` partition under the same base path.
+Violations are stored under `{base}/violations/pipeline_id={value}/`. DuckDB reads all
+files at query time via `read_parquet(glob)` — there is no persistent database file.
 
 ## Tests
 
 ```bash
-uv run --extra dev pytest
+uv run python -m pytest
 ```
