@@ -60,10 +60,18 @@ def query_feature_health(
     feature_name: str,
     window: str,
     compare_to: str | None,
+    operator_id: str | None = None,
 ) -> dict[str, Any]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
+
+    conditions = ["capture_mode = 'AGGREGATE'", "feature_name = ?", "processing_time >= ?"]
+    params: list[Any] = [feature_name, cutoff]
+    if operator_id:
+        conditions.append("operator_id = ?")
+        params.append(operator_id)
+    where_clause = " AND ".join(conditions)
 
     con = duckdb.connect()
     _configure_s3(con)
@@ -76,13 +84,13 @@ def query_feature_health(
                 output_cardinality,
                 watermark,
                 capture_drop_since_last,
-                emit_interval_ms
+                emit_interval_ms,
+                output_cardinality * 1.0 / NULLIF(input_cardinality, 0) as filter_ratio
             FROM read_parquet('{glob_pattern}')
-            WHERE feature_name = ?
-              AND processing_time >= ?
+            WHERE {where_clause}
             ORDER BY processing_time DESC
             """,
-            [feature_name, cutoff],
+            params,
         ).fetchall()
     except duckdb.IOException:
         logger.warning("No Parquet data found at %s", glob_pattern)
@@ -95,6 +103,7 @@ def query_feature_health(
             "processing_time": r[0],
             "input_cardinality": r[1],
             "output_cardinality": r[2],
+            "filter_ratio": float(r[6]) if r[6] is not None else None,
             "watermark": r[3],
             "capture_drop_since_last": r[4],
         }
@@ -190,8 +199,21 @@ def _empty_feature_health(pipeline_id: str, feature_name: str, window: str) -> d
     }
 
 
-def query_pipeline_health(pipeline_id: str) -> list[dict[str, Any]]:
+def query_pipeline_health(
+    pipeline_id: str,
+    window: str = "24h",
+    operator_id: str | None = None,
+) -> list[dict[str, Any]]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
+    delta = _parse_window(window)
+    cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
+
+    conditions = ["capture_mode = 'AGGREGATE'", "processing_time >= ?"]
+    params: list[Any] = [cutoff]
+    if operator_id:
+        conditions.append("operator_id = ?")
+        params.append(operator_id)
+    where_clause = " AND ".join(conditions)
 
     con = duckdb.connect()
     _configure_s3(con)
@@ -203,11 +225,14 @@ def query_pipeline_health(pipeline_id: str) -> list[dict[str, Any]]:
                 operator_type,
                 max(processing_time) as last_seen,
                 sum(input_cardinality) as total_input,
-                bool_or(capture_drop_since_last) as any_drops
+                bool_or(capture_drop_since_last) as any_drops,
+                avg(output_cardinality * 1.0 / NULLIF(input_cardinality, 0)) as filter_ratio
             FROM read_parquet('{glob_pattern}')
+            WHERE {where_clause}
             GROUP BY operator_id, operator_type
             ORDER BY operator_id
             """,
+            params,
         ).fetchall()
     except duckdb.IOException:
         logger.warning("No Parquet data found at %s", glob_pattern)
@@ -222,6 +247,7 @@ def query_pipeline_health(pipeline_id: str) -> list[dict[str, Any]]:
             "last_seen": r[2],
             "total_input": int(r[3]) if r[3] is not None else 0,
             "any_drops": bool(r[4]),
+            "filter_ratio": float(r[5]) if r[5] is not None else None,
         }
         for r in rows
     ]
@@ -306,17 +332,27 @@ def query_entity_values(
     window: str,
     entity_id: str | None,
     limit: int,
+    capture_mode: str | None = "ENTITY",
+    operator_id: str | None = None,
 ) -> list[dict[str, Any]]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
 
-    conditions = ["capture_mode = 'ENTITY'", "feature_name = ?", "processing_time >= ?"]
+    conditions = ["feature_name = ?", "processing_time >= ?"]
     params: list[Any] = [feature_name, cutoff]
+
+    if capture_mode and capture_mode.upper() != "ALL":
+        conditions.append("capture_mode = ?")
+        params.append(capture_mode.upper())
 
     if entity_id:
         conditions.append("entity_id = ?")
         params.append(entity_id)
+
+    if operator_id:
+        conditions.append("operator_id = ?")
+        params.append(operator_id)
 
     where_clause = " AND ".join(conditions)
 

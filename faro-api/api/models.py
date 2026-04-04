@@ -61,6 +61,7 @@ class CardinalityPoint(BaseModel):
     processing_time: str
     input_cardinality: int
     output_cardinality: int
+    filter_ratio: float | None
     watermark: str | None
     capture_drop_since_last: bool
 
@@ -82,6 +83,7 @@ class OperatorSummary(BaseModel):
     last_seen: str | None
     total_input: int
     any_drops: bool
+    filter_ratio: float | None
 
 
 class PipelineHealthResponse(BaseModel):

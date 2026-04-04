@@ -20,8 +20,9 @@ def get_feature_health(
     pipeline_id: Annotated[str, Query(description="Pipeline ID (required)")],
     window: Annotated[str, Query(description="Time window, e.g. 1h, 30m, 7d")] = "1h",
     compare_to: Annotated[str | None, Query(description="Comparison period, e.g. 24h_ago")] = None,
+    operator_id: Annotated[str | None, Query(description="Scope to a single operator")] = None,
 ):
-    result = query_feature_health(pipeline_id, feature_name, window, compare_to)
+    result = query_feature_health(pipeline_id, feature_name, window, compare_to, operator_id)
 
     freshness = check_freshness_violation(pipeline_id, feature_name, result["emit_interval_ms"])
     result["freshness_violation"] = freshness
@@ -49,7 +50,11 @@ def get_feature_health(
 
 
 @router.get("/pipelines/{pipeline_id}/health", response_model=PipelineHealthResponse)
-def get_pipeline_health(pipeline_id: str):
-    operators_data = query_pipeline_health(pipeline_id)
+def get_pipeline_health(
+    pipeline_id: str,
+    window: Annotated[str, Query(description="Time window, e.g. 1h, 30m, 7d")] = "24h",
+    operator_id: Annotated[str | None, Query(description="Scope to a single operator")] = None,
+):
+    operators_data = query_pipeline_health(pipeline_id, window, operator_id)
     operators = [OperatorSummary(**op) for op in operators_data]
     return PipelineHealthResponse(pipeline_id=pipeline_id, operators=operators)
