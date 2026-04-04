@@ -39,7 +39,7 @@ Faro provides adapters for multiple streaming engines. Pick the one that matches
 
 ### Apache Flink (Java)
 
-Requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly` — it depends on your existing runtime without bundling Flink.
+Requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly`, so it depends on your existing flink runtime without bundling Flink by itself.
 
 ```gradle
 dependencies {
@@ -49,7 +49,7 @@ dependencies {
 
 ### Apache Spark Structured Streaming (Java/Scala)
 
-Requires **Spark 3.5.x** and **Scala 2.13**. `faro-spark` declares Spark as `compileOnly`. A Databricks-compatible fat JAR (`faro-spark-databricks.jar`) is also published for cluster attachment.
+Requires **Spark 3.5.x** and **Scala 2.13**. `faro-spark` declares Spark as `compileOnly`. A Databricks-compatible JAR (`faro-spark-databricks.jar`) is also published for cluster attachment.
 
 ```gradle
 dependencies {
@@ -70,18 +70,17 @@ docker run -p 9000:9000 \
 
 ## Comparison
 
-There are many tools on the market that can provide some level of feature observability, but they all require significant instrumentation, custom metrics, or new infrastructure.
-Faro wants to be really simple. It provides more out-of-the-box visibility with zero pipeline changes and no new infrastructure required.
+Every tool in this space can surface *some* feature health signal, but they all require you to emit custom metrics, write alerting rules, or run additional infrastructure. Faro is different: it captures pipeline internals passively at the operator level and requires no changes to your pipeline logic or data schema.
 
 **Observability tools**
 
-| | Faro | Datadog | Grafana | Lightstep | Honeycomb |
+| | Faro | Datadog | Grafana | New Relic | Honeycomb |
 |---|---|---|---|---|---|
 | Pipeline-level cardinality & watermark | ✓ | needs custom metrics | needs custom metrics | needs custom metrics | needs custom spans |
 | Per-entity feature value at processing time | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Freshness, drift, null-rate, cardinality violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
-| Zero pipeline changes required | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Works without new infra | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
+| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ |
+| No additional infrastructure required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
 
 **Feature stores**
 
@@ -90,8 +89,8 @@ Faro wants to be really simple. It provides more out-of-the-box visibility with 
 | Pipeline-level cardinality & watermark | ✓ | ✗ | ✗ | partial | ✗ | ✗ |
 | Per-entity feature value at processing time | ✓ | serving store only | serving store only | serving store only | serving store only | serving store only |
 | Freshness, drift, null-rate, cardinality violations | ✓ | partial | partial | ✓ | ✗ | partial |
-| Zero pipeline changes required | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Works without new infra | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
+| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| No additional infrastructure required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 ## High-level operations
 
@@ -115,10 +114,11 @@ choice.
 
 | Module | Description                                                                                                                                                                                                                                              |
 |--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `faro-core` | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies.                                                                                                                                                     |
-| `faro-flink` | Flink adapter that wraps operators and sink implementations.                                                                                                                                                                                             |
-| `faro-api` | A FastAPI service with ten REST endpoints. An `/ingest` endpoint buffers incoming `CaptureEvent`s and flushes them to Parquet. A query layer backed by DuckDB covers pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. |
-| `faro-e2e` | Runnable demo Flink jobs covering every sink variant and both AGGREGATE and ENTITY modes.                                                                                                                                                                |
+| `faro-core` | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies. |
+| `faro-flink` | Flink 1.18.x adapter that wraps operators and sink implementations. |
+| `faro-spark` | Spark 3.5.x / Scala 2.13 adapter. Also published as a Databricks-compatible fat JAR. |
+| `faro-api` | FastAPI service with ten REST endpoints: ingest, pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. Backed by DuckDB over Parquet. |
+| `faro-e2e` | Runnable demo jobs covering every sink variant and both AGGREGATE and ENTITY modes. |
 
 **Sink options:**
 
