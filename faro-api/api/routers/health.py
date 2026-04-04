@@ -21,8 +21,9 @@ def get_feature_health(
     window: Annotated[str, Query(description="Time window, e.g. 1h, 30m, 7d")] = "1h",
     compare_to: Annotated[str | None, Query(description="Comparison period, e.g. 24h_ago")] = None,
     operator_id: Annotated[str | None, Query(description="Scope to a single operator")] = None,
+    end_time: Annotated[str | None, Query(description="ISO-8601 upper bound for processing_time")] = None,
 ):
-    result = query_feature_health(pipeline_id, feature_name, window, compare_to, operator_id)
+    result = query_feature_health(pipeline_id, feature_name, window, compare_to, operator_id, end_time)
 
     freshness = check_freshness_violation(pipeline_id, feature_name, result["emit_interval_ms"])
     result["freshness_violation"] = freshness
@@ -44,6 +45,7 @@ def get_feature_health(
         cardinality_trend=[CardinalityPoint(**p) for p in result["cardinality_trend"]],
         watermark_lag_ms=result["watermark_lag_ms"],
         capture_drops=result["capture_drops"],
+        emit_interval_ms=result["emit_interval_ms"],
         freshness_violation=result["freshness_violation"],
         comparison=result["comparison"],
     )

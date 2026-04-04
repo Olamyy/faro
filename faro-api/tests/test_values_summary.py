@@ -127,3 +127,4 @@ def test_summary_null_count_for_none_values():
     body = resp.json()
     assert body["entity_count"] == 1
     assert pytest.approx(body["value_min"]) == 5.0
+    assert body["null_count"] == 0

@@ -73,6 +73,7 @@ class FeatureHealthResponse(BaseModel):
     cardinality_trend: list[CardinalityPoint]
     watermark_lag_ms: int | None
     capture_drops: bool
+    emit_interval_ms: int | None = None
     freshness_violation: bool
     comparison: dict[str, Any] | None = None
 

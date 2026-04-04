@@ -61,6 +61,7 @@ def query_feature_health(
     window: str,
     compare_to: str | None,
     operator_id: str | None = None,
+    end_time: str | None = None,
 ) -> dict[str, Any]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
     delta = _parse_window(window)
@@ -68,6 +69,9 @@ def query_feature_health(
 
     conditions = ["capture_mode = 'AGGREGATE'", "feature_name = ?", "processing_time >= ?"]
     params: list[Any] = [feature_name, cutoff]
+    if end_time:
+        conditions.append("processing_time < ?")
+        params.append(end_time)
     if operator_id:
         conditions.append("operator_id = ?")
         params.append(operator_id)
@@ -136,7 +140,6 @@ def query_feature_health(
         "watermark_lag_ms": watermark_lag_ms,
         "capture_drops": capture_drops,
         "emit_interval_ms": emit_interval_ms,
-        "freshness_violation": False,
         "comparison": comparison,
     }
 
@@ -194,7 +197,6 @@ def _empty_feature_health(pipeline_id: str, feature_name: str, window: str) -> d
         "watermark_lag_ms": None,
         "capture_drops": False,
         "emit_interval_ms": None,
-        "freshness_violation": False,
         "comparison": None,
     }
 
@@ -253,21 +255,26 @@ def query_pipeline_health(
     ]
 
 
+_SEVERITY_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+_SEVERITY_BY_RANK = {v: k for k, v in _SEVERITY_RANK.items()}
+
+
 def query_violations(
     pipeline_id: str | None,
     feature_name: str | None,
     since: str | None,
     severity_gte: str | None,
+    violation_type: str | None = None,
 ) -> list[dict[str, Any]]:
-    _severity_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
-    min_rank = _severity_rank.get((severity_gte or "LOW").upper(), 0)
-
     if pipeline_id:
         glob_pattern = _violation_glob(pipeline_id)
     else:
         glob_pattern = _all_violations_glob()
 
-    conditions = ["1=1"]
+    min_rank = _SEVERITY_RANK.get((severity_gte or "LOW").upper(), 0)
+    eligible_severities = [k for k, v in _SEVERITY_RANK.items() if v >= min_rank]
+
+    conditions = [f"severity IN ({', '.join(repr(s) for s in eligible_severities)})"]
     params: list[Any] = []
 
     if feature_name:
@@ -276,6 +283,9 @@ def query_violations(
     if since:
         conditions.append("detected_at >= ?")
         params.append(since)
+    if violation_type:
+        conditions.append("violation_type = ?")
+        params.append(violation_type)
 
     where_clause = " AND ".join(conditions)
 
@@ -296,19 +306,17 @@ def query_violations(
     finally:
         con.close()
 
-    result = []
-    for r in rows:
-        row_rank = _severity_rank.get((r[4] or "LOW").upper(), 0)
-        if row_rank >= min_rank:
-            result.append({
-                "pipeline_id": r[0],
-                "feature_name": r[1],
-                "violation_type": r[2],
-                "detected_at": r[3],
-                "severity": r[4],
-                "detail": r[5],
-            })
-    return result
+    return [
+        {
+            "pipeline_id": r[0],
+            "feature_name": r[1],
+            "violation_type": r[2],
+            "detected_at": r[3],
+            "severity": r[4],
+            "detail": r[5],
+        }
+        for r in rows
+    ]
 
 
 def _decode_feature_value(raw: bytes | None, value_type: str | None) -> float | int | str | None:
@@ -442,22 +450,31 @@ def query_entity_value_summary(
             "null_count": null_count,
         }
 
-    numeric.sort()
-    n = len(numeric)
-    mean = sum(numeric) / n
-    p50 = numeric[int(n * 0.50)]
-    p95 = numeric[min(int(n * 0.95), n - 1)]
+    values_sql = ", ".join(f"({v})" for v in numeric)
+    stats_con = duckdb.connect()
+    try:
+        stats = stats_con.execute(
+            f"""
+            SELECT
+                min(v), max(v), avg(v),
+                percentile_cont(0.50) WITHIN GROUP (ORDER BY v),
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY v)
+            FROM (VALUES {values_sql}) t(v)
+            """
+        ).fetchone()
+    finally:
+        stats_con.close()
 
     return {
         "feature_name": feature_name,
         "pipeline_id": pipeline_id,
         "window": window,
         "entity_count": entity_count,
-        "value_min": numeric[0],
-        "value_max": numeric[-1],
-        "value_mean": mean,
-        "value_p50": p50,
-        "value_p95": p95,
+        "value_min": stats[0],
+        "value_max": stats[1],
+        "value_mean": stats[2],
+        "value_p50": stats[3],
+        "value_p95": stats[4],
         "null_count": null_count,
     }
 
