@@ -121,6 +121,15 @@ class EntityValuesResponse(BaseModel):
     values: list[EntityValuePoint]
 
 
+class PipelinesResponse(BaseModel):
+    pipelines: list[str]
+
+
+class FeaturesResponse(BaseModel):
+    pipeline_id: str
+    features: list[str]
+
+
 class EntityValueSummary(BaseModel):
     feature_name: str
     pipeline_id: str

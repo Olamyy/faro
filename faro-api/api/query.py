@@ -520,3 +520,40 @@ def check_freshness_violation(
         con.close()
 
     return row is None or row[0] == 0
+
+
+def query_list_pipelines() -> list[str]:
+    if settings.storage_backend == "s3":
+        glob_pattern = f"s3://{settings.s3_bucket}/{settings.s3_prefix}pipeline_id=*/date=*/part-*.parquet"
+    else:
+        glob_pattern = f"{settings.local_path}/pipeline_id=*/date=*/part-*.parquet"
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        rows = con.execute(
+            f"SELECT DISTINCT pipeline_id FROM read_parquet('{glob_pattern}') ORDER BY pipeline_id"
+        ).fetchall()
+    except duckdb.IOException:
+        return []
+    finally:
+        con.close()
+
+    return [r[0] for r in rows]
+
+
+def query_list_features(pipeline_id: str) -> list[str]:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        rows = con.execute(
+            f"SELECT DISTINCT feature_name FROM read_parquet('{glob_pattern}') WHERE feature_name IS NOT NULL ORDER BY feature_name"
+        ).fetchall()
+    except duckdb.IOException:
+        return []
+    finally:
+        con.close()
+
+    return [r[0] for r in rows]
