@@ -122,13 +122,14 @@ choice.
 
 **Sink options:**
 
-| Sink | When to use                                                     |
-|------|-----------------------------------------------------------------|
-| `StdoutCaptureEventSink` | Local development and testing                                   |
-| `KafkaCaptureEventSink` | You already have Kafka or Redpanda                              |
-| `HttpCaptureEventSink` | You want faro-api, or any webhook receiver                      |
-| `OtelCaptureEventSink` | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
-| `AsyncCaptureEventSink` | Wraps any of the above. Decouples capture from operator threads |
+| Sink | Adapter | When to use |
+|------|---------|-------------|
+| `StdoutCaptureEventSink` | FLINK, DATABRICKS | Local development and testing |
+| `KafkaCaptureEventSink` | FLINK, DATABRICKS | You already have Kafka or Redpanda |
+| `HttpCaptureEventSink` | FLINK, DATABRICKS | You want faro-api, or any webhook receiver |
+| `OtelCaptureEventSink` | FLINK, DATABRICKS | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
+| `DeltaCaptureEventSink` | DATABRICKS | You're on Spark or Databricks and want events in a Delta table |
+| `AsyncCaptureEventSink` | FLINK, DATABRICKS | Wraps any of the above. Decouples capture from operator threads |
 
 All sinks are fire-and-forget. Failures are logged and never propagate to your pipeline.
 `AsyncCaptureEventSink` additionally tracks overflow. When the in-memory ring buffer fills
