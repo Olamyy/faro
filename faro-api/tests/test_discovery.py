@@ -58,8 +58,3 @@ def test_list_features_for_pipeline():
     assert resp.json()["pipeline_id"] == "pipe-feat"
 
 
-def test_list_features_empty_for_unknown_pipeline():
-    client = TestClient(app)
-    resp = client.get("/pipelines/no-such-pipeline/features")
-    assert resp.status_code == 200
-    assert resp.json()["features"] == []

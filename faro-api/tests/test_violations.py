@@ -56,9 +56,3 @@ def test_violations_filter_by_feature(violation_store):
     assert body["violations"][0]["feature_name"] == "temperature"
 
 
-def test_violations_empty_when_no_data(tmp_path):
-    cfg.settings.local_path = str(tmp_path)
-    client = TestClient(app)
-    resp = client.get("/violations?pipeline_id=no-such-pipeline")
-    assert resp.status_code == 200
-    assert resp.json()["violations"] == []

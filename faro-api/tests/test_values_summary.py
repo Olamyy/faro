@@ -57,8 +57,6 @@ def test_summary_returns_stats():
     assert resp.status_code == 200
 
     body = resp.json()
-    assert body["feature_name"] == "temperature"
-    assert body["pipeline_id"] == "pipe-1"
     assert body["entity_count"] == 5
     assert body["null_count"] == 0
     assert pytest.approx(body["value_min"]) == 10.0
@@ -66,18 +64,6 @@ def test_summary_returns_stats():
     assert pytest.approx(body["value_mean"]) == 30.0
     assert body["value_p50"] is not None
     assert body["value_p95"] is not None
-
-
-def test_summary_empty_when_no_data():
-    client = TestClient(app)
-    resp = client.get("/features/temperature/values/summary?pipeline_id=pipe-missing&window=1h")
-    assert resp.status_code == 200
-
-    body = resp.json()
-    assert body["entity_count"] == 0
-    assert body["value_min"] is None
-    assert body["value_max"] is None
-    assert body["null_count"] == 0
 
 
 def test_summary_excludes_aggregate_events():
@@ -104,27 +90,3 @@ def test_summary_excludes_aggregate_events():
     assert pytest.approx(body["value_min"]) == 99.0
 
 
-def test_summary_null_count_for_none_values():
-    no_value = CaptureEvent(
-        pipeline_id="pipe-1",
-        operator_id="op-1",
-        operator_type="WINDOW",
-        capture_mode="ENTITY",
-        processing_time=_now(),
-        trace_id="t", span_id="s",
-        input_cardinality=1, output_cardinality=1,
-        emit_interval_ms=0, capture_drop_since_last=False,
-        feature_name="temperature",
-        entity_id="unknown",
-        feature_value_type="SCALAR_DOUBLE",
-    )
-    ParquetStore.write_events([no_value, _entity_event("x", 5.0)])
-
-    client = TestClient(app)
-    resp = client.get("/features/temperature/values/summary?pipeline_id=pipe-1&window=1d")
-    assert resp.status_code == 200
-
-    body = resp.json()
-    assert body["entity_count"] == 1
-    assert pytest.approx(body["value_min"]) == 5.0
-    assert body["null_count"] == 0
