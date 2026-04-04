@@ -35,14 +35,25 @@ per entity, without touching your pipeline logic.
 
 ## Installation
 
-### Flink (Java)
+Faro provides adapters for multiple streaming engines. Pick the one that matches your stack.
 
-Add `faro-flink` to your build. This requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly`, so it depends on your existing flink runtime without bundling Flink by itself.
+### Apache Flink (Java)
 
+Requires **Flink 1.18.x** and **Java 17**. `faro-flink` declares Flink as `compileOnly` — it depends on your existing runtime without bundling Flink.
 
 ```gradle
 dependencies {
     implementation 'dev.faro:faro-flink:0.1.0-SNAPSHOT'
+}
+```
+
+### Apache Spark Structured Streaming (Java/Scala)
+
+Requires **Spark 3.5.x** and **Scala 2.13**. `faro-spark` declares Spark as `compileOnly`. A Databricks-compatible fat JAR (`faro-spark-databricks.jar`) is also published for cluster attachment.
+
+```gradle
+dependencies {
+    implementation 'dev.faro:faro-spark:0.1.0-SNAPSHOT'
 }
 ```
 
