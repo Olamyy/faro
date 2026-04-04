@@ -17,6 +17,15 @@ class Settings:
     s3_prefix: str = field(
         default_factory=lambda: os.environ.get("FARO_S3_PREFIX", "faro/")
     )
+    s3_region: str = field(
+        default_factory=lambda: os.environ.get("FARO_S3_REGION", "us-east-1")
+    )
+    s3_access_key_id: str | None = field(
+        default_factory=lambda: os.environ.get("FARO_S3_ACCESS_KEY_ID")
+    )
+    s3_secret_access_key: str | None = field(
+        default_factory=lambda: os.environ.get("FARO_S3_SECRET_ACCESS_KEY")
+    )
     s3_endpoint_url: str | None = field(
         default_factory=lambda: os.environ.get("FARO_S3_ENDPOINT_URL")
     )

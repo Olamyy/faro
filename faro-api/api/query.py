@@ -2,7 +2,6 @@ import logging
 import re
 import struct
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -27,20 +26,33 @@ def _parse_window(window: str) -> timedelta:
 
 
 def _glob_for_pipeline(pipeline_id: str) -> str:
-    base = settings.local_path
-    return f"{base}/pipeline_id={pipeline_id}/date=*/part-*.parquet"
+    if settings.storage_backend == "s3":
+        return f"s3://{settings.s3_bucket}/{settings.s3_prefix}pipeline_id={pipeline_id}/date=*/part-*.parquet"
+    return f"{settings.local_path}/pipeline_id={pipeline_id}/date=*/part-*.parquet"
 
 
 def _violation_glob(pipeline_id: str) -> str:
-    base = settings.local_path
-    return f"{base}/violations/pipeline_id={pipeline_id}/part-*.parquet"
+    if settings.storage_backend == "s3":
+        return f"s3://{settings.s3_bucket}/{settings.s3_prefix}violations/pipeline_id={pipeline_id}/part-*.parquet"
+    return f"{settings.local_path}/violations/pipeline_id={pipeline_id}/part-*.parquet"
 
 
-def _any_parquet_exists(glob_pattern: str) -> bool:
-    base = glob_pattern.split("/pipeline_id=")[0]
-    pipeline_part = glob_pattern.split("/pipeline_id=")[1].split("/")[0]
-    path = Path(base) / f"pipeline_id={pipeline_part}"
-    return path.exists() and any(path.rglob("part-*.parquet"))
+def _all_violations_glob() -> str:
+    if settings.storage_backend == "s3":
+        return f"s3://{settings.s3_bucket}/{settings.s3_prefix}violations/pipeline_id=*/part-*.parquet"
+    return f"{settings.local_path}/violations/pipeline_id=*/part-*.parquet"
+
+
+def _configure_s3(con: duckdb.DuckDBPyConnection) -> None:
+    if settings.storage_backend != "s3":
+        return
+    con.execute(f"SET s3_region='{settings.s3_region}'")
+    if settings.s3_access_key_id:
+        con.execute(f"SET s3_access_key_id='{settings.s3_access_key_id}'")
+    if settings.s3_secret_access_key:
+        con.execute(f"SET s3_secret_access_key='{settings.s3_secret_access_key}'")
+    if settings.s3_endpoint_url:
+        con.execute(f"SET s3_endpoint='{settings.s3_endpoint_url}'")
 
 
 def query_feature_health(
@@ -50,14 +62,11 @@ def query_feature_health(
     compare_to: str | None,
 ) -> dict[str, Any]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
-
-    if not _any_parquet_exists(glob_pattern):
-        return _empty_feature_health(pipeline_id, feature_name, window)
-
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -137,6 +146,7 @@ def _build_comparison(
     compare_start = (now - compare_delta - delta).isoformat()
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -183,10 +193,8 @@ def _empty_feature_health(pipeline_id: str, feature_name: str, window: str) -> d
 def query_pipeline_health(pipeline_id: str) -> list[dict[str, Any]]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
 
-    if not _any_parquet_exists(glob_pattern):
-        return []
-
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -228,16 +236,10 @@ def query_violations(
     _severity_rank = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
     min_rank = _severity_rank.get((severity_gte or "LOW").upper(), 0)
 
-    base = settings.local_path
     if pipeline_id:
         glob_pattern = _violation_glob(pipeline_id)
-        if not _any_violation_exists(pipeline_id):
-            return []
     else:
-        glob_pattern = f"{base}/violations/pipeline_id=*/part-*.parquet"
-        viol_root = Path(base) / "violations"
-        if not viol_root.exists() or not any(viol_root.rglob("part-*.parquet")):
-            return []
+        glob_pattern = _all_violations_glob()
 
     conditions = ["1=1"]
     params: list[Any] = []
@@ -252,6 +254,7 @@ def query_violations(
     where_clause = " AND ".join(conditions)
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -282,12 +285,6 @@ def query_violations(
     return result
 
 
-def _any_violation_exists(pipeline_id: str) -> bool:
-    base = settings.local_path
-    path = Path(base) / "violations" / f"pipeline_id={pipeline_id}"
-    return path.exists() and any(path.rglob("part-*.parquet"))
-
-
 def _decode_feature_value(raw: bytes | None, value_type: str | None) -> float | int | str | None:
     if raw is None or value_type is None:
         return None
@@ -311,10 +308,6 @@ def query_entity_values(
     limit: int,
 ) -> list[dict[str, Any]]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
-
-    if not _any_parquet_exists(glob_pattern):
-        return []
-
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
 
@@ -328,6 +321,7 @@ def query_entity_values(
     where_clause = " AND ".join(conditions)
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -363,13 +357,11 @@ def query_entity_value_summary(
     window: str,
 ) -> dict[str, Any] | None:
     glob_pattern = _glob_for_pipeline(pipeline_id)
-    if not _any_parquet_exists(glob_pattern):
-        return None
-
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         rows = con.execute(
             f"""
@@ -448,10 +440,9 @@ def check_freshness_violation(
     ).isoformat()
 
     glob_pattern = _glob_for_pipeline(pipeline_id)
-    if not _any_parquet_exists(glob_pattern):
-        return True
 
     con = duckdb.connect()
+    _configure_s3(con)
     try:
         row = con.execute(
             f"""
