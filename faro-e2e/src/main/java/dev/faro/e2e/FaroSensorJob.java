@@ -6,6 +6,7 @@ public class FaroSensorJob {
 
     public static void main(String[] args) throws Exception {
         String faroApiUrl = System.getenv().getOrDefault("FARO_API_URL", "http://faro-api:9000/ingest");
-        SensorPipeline.execute(HttpCaptureEventSink.factory(faroApiUrl), "sensor-pipeline-faro", "sensor-pipeline-faro");
+        ScenarioMode scenario = ScenarioMode.fromEnv();
+        SensorPipeline.execute(HttpCaptureEventSink.factory(faroApiUrl), "sensor-pipeline-faro", "sensor-pipeline-faro", scenario, CaptureMode.ENTITY);
     }
 }

@@ -84,6 +84,9 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
+      - FARO_SCENARIO=${FARO_SCENARIO:-ROTATING}
+      - FARO_CAPTURE_MODE=${FARO_CAPTURE_MODE:-ENTITY}
+      - FARO_API_URL=http://faro-api:9000/ingest
     volumes:
       - ./output:/tmp
 

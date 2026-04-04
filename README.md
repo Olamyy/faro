@@ -1,21 +1,16 @@
 # Faro
 
-Faro adds runtime observability to your Flink and Spark pipelines. It captures per-operator
-cardinality, watermark lag, per-entity feature values, and automatic violation detection
-without changing your pipeline logic.
+![Faro UI — Feature Health](docs/screenshots/feature-health.png)
 
+
+Faro is an observability layer for streaming feature pipelines. It captures operator
+cardinality, watermark lag, per-entity feature values, and automatic violation detection
+without changing your pipeline logic. It's entirely passive and non-intrusive. 
 You can route capture events to wherever you already send observability data,
 <a href="https://grafana.com" target="_blank">Grafana</a>,
 <a href="https://newrelic.com" target="_blank">New Relic</a>,
 <a href="https://www.honeycomb.io" target="_blank">Honeycomb</a>,
-or your existing Kafka topics.
-
-> [!NOTE]
->
-> If you don't have a monitoring stack, faro includes a `faro-api` REST service with
-> Parquet-backed storage, violation detection, and a ten-endpoint query layer.
-
-*Faro exists because feature pipelines are production infrastructure and deserve the same observability as your API servers.*
+or your existing Kafka topics. If you don't have a monitoring stack, faro includes a built-in UI and query API backed by DuckDB over Parquet for ad-hoc exploration and alerting.
 
 ## What problem does it solve?
 
@@ -258,12 +253,3 @@ mode, and a Z-score baseline check over a rolling 7-day window.
 Per-entity feature lookup and trace-level lineage are shipped. Planned additions include
 bitemporal indexing and per-entity erasure.
 
-**Built-in UI**
-
-A lightweight dashboard served directly by `faro-api` is planned, covering pipeline and
-feature health at a glance, cardinality and watermark trends over configurable windows, a
-violations feed, and an entity value explorer.
-
----
-
-Apache-2.0
