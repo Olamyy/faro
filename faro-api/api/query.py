@@ -522,6 +522,135 @@ def check_freshness_violation(
     return row is None or row[0] == 0
 
 
+def _compute_mean_for_window(
+    glob_pattern: str,
+    feature_name: str,
+    start: str,
+    end: str | None,
+) -> float | None:
+    con = duckdb.connect()
+    _configure_s3(con)
+    conditions = ["feature_name = ?", "capture_mode = 'ENTITY'", "feature_value IS NOT NULL", "processing_time >= ?"]
+    params: list[Any] = [feature_name, start]
+    if end:
+        conditions.append("processing_time < ?")
+        params.append(end)
+    where_clause = " AND ".join(conditions)
+    try:
+        rows = con.execute(
+            f"""
+            SELECT feature_value, feature_value_type
+            FROM read_parquet('{glob_pattern}')
+            WHERE {where_clause}
+            """,
+            params,
+        ).fetchall()
+    except (duckdb.IOException, duckdb.BinderException):
+        return None
+    finally:
+        con.close()
+
+    numeric = [_decode_feature_value(r[0], r[1]) for r in rows]
+    numeric = [v for v in numeric if isinstance(v, (int, float))]
+    if not numeric:
+        return None
+    return sum(numeric) / len(numeric)
+
+
+def check_mean_drift(
+    pipeline_id: str,
+    feature_name: str,
+    window: str,
+) -> bool:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+    delta = _parse_window(window)
+    now = datetime.now(tz=timezone.utc)
+    current_start = (now - delta).isoformat()
+    prev_start = (now - 2 * delta).isoformat()
+    prev_end = current_start
+
+    current_mean = _compute_mean_for_window(glob_pattern, feature_name, current_start, None)
+    prev_mean = _compute_mean_for_window(glob_pattern, feature_name, prev_start, prev_end)
+
+    if current_mean is None or prev_mean is None or prev_mean == 0:
+        return False
+
+    return abs(current_mean - prev_mean) / abs(prev_mean) > settings.drift_threshold
+
+
+def check_null_rate(
+    pipeline_id: str,
+    feature_name: str,
+    window: str,
+) -> bool:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+    delta = _parse_window(window)
+    cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        row = con.execute(
+            f"""
+            SELECT
+                count(*) FILTER (WHERE feature_value IS NULL),
+                count(*)
+            FROM read_parquet('{glob_pattern}')
+            WHERE feature_name = ?
+              AND capture_mode = 'ENTITY'
+              AND processing_time >= ?
+            """,
+            [feature_name, cutoff],
+        ).fetchone()
+    except (duckdb.IOException, duckdb.BinderException):
+        return False
+    finally:
+        con.close()
+
+    if row is None or row[1] == 0:
+        return False
+
+    return (row[0] / row[1]) > settings.null_rate_threshold
+
+
+def check_cardinality_anomaly(
+    pipeline_id: str,
+    feature_name: str,
+    window: str,
+) -> bool:
+    glob_pattern = _glob_for_pipeline(pipeline_id)
+    delta = _parse_window(window)
+    now = datetime.now(tz=timezone.utc)
+    current_start = (now - delta).isoformat()
+    prev_start = (now - 2 * delta).isoformat()
+    prev_end = current_start
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        row = con.execute(
+            f"""
+            SELECT
+                avg(CASE WHEN processing_time >= ? THEN output_cardinality * 1.0 / NULLIF(input_cardinality, 0) END),
+                avg(CASE WHEN processing_time >= ? AND processing_time < ? THEN output_cardinality * 1.0 / NULLIF(input_cardinality, 0) END)
+            FROM read_parquet('{glob_pattern}')
+            WHERE feature_name = ?
+              AND capture_mode = 'AGGREGATE'
+              AND processing_time >= ?
+            """,
+            [current_start, prev_start, prev_end, feature_name, prev_start],
+        ).fetchone()
+    except (duckdb.IOException, duckdb.BinderException):
+        return False
+    finally:
+        con.close()
+
+    if row is None or row[0] is None or row[1] is None or row[1] == 0:
+        return False
+
+    return (row[1] - row[0]) / row[1] > settings.cardinality_drop_threshold
+
+
 def query_list_pipelines() -> list[str]:
     if settings.storage_backend == "s3":
         glob_pattern = f"s3://{settings.s3_bucket}/{settings.s3_prefix}pipeline_id=*/date=*/part-*.parquet"

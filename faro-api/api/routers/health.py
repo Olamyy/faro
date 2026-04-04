@@ -5,9 +5,12 @@ from fastapi import APIRouter, Query
 
 from ..models import FeatureHealthResponse, PipelineHealthResponse, OperatorSummary, CardinalityPoint
 from ..query import (
+    check_cardinality_anomaly,
+    check_freshness_violation,
+    check_mean_drift,
+    check_null_rate,
     query_feature_health,
     query_pipeline_health,
-    check_freshness_violation,
 )
 from ..store import ParquetStore
 
@@ -28,14 +31,46 @@ def get_feature_health(
     freshness = check_freshness_violation(pipeline_id, feature_name, result["emit_interval_ms"])
     result["freshness_violation"] = freshness
 
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
+
     if freshness:
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
             violation_type="FRESHNESS",
-            detected_at=datetime.now(tz=timezone.utc).isoformat(),
+            detected_at=now_iso,
             severity="HIGH",
             detail=f"No event received for feature '{feature_name}' in expected window",
+        )
+
+    if check_mean_drift(pipeline_id, feature_name, window):
+        ParquetStore.write_violation(
+            pipeline_id=pipeline_id,
+            feature_name=feature_name,
+            violation_type="MEAN_DRIFT",
+            detected_at=now_iso,
+            severity="MEDIUM",
+            detail=f"Feature '{feature_name}' mean drifted beyond threshold",
+        )
+
+    if check_null_rate(pipeline_id, feature_name, window):
+        ParquetStore.write_violation(
+            pipeline_id=pipeline_id,
+            feature_name=feature_name,
+            violation_type="NULL_RATE",
+            detected_at=now_iso,
+            severity="HIGH",
+            detail=f"Feature '{feature_name}' null rate exceeds threshold",
+        )
+
+    if check_cardinality_anomaly(pipeline_id, feature_name, window):
+        ParquetStore.write_violation(
+            pipeline_id=pipeline_id,
+            feature_name=feature_name,
+            violation_type="CARDINALITY_ANOMALY",
+            detected_at=now_iso,
+            severity="HIGH",
+            detail=f"Feature '{feature_name}' output/input ratio dropped beyond threshold",
         )
 
     return FeatureHealthResponse(
