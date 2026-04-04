@@ -557,3 +557,83 @@ def query_list_features(pipeline_id: str) -> list[str]:
         con.close()
 
     return [r[0] for r in rows]
+
+
+def _all_pipelines_glob() -> str:
+    if settings.storage_backend == "s3":
+        return f"s3://{settings.s3_bucket}/{settings.s3_prefix}pipeline_id=*/date=*/part-*.parquet"
+    return f"{settings.local_path}/pipeline_id=*/date=*/part-*.parquet"
+
+
+def query_trace_events(trace_id: str) -> list[dict[str, Any]]:
+    glob_pattern = _all_pipelines_glob()
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        rows = con.execute(
+            f"""
+            SELECT pipeline_id, operator_id, operator_type, feature_name, capture_mode,
+                   processing_time, trace_id, span_id, parent_span_id,
+                   input_cardinality, output_cardinality
+            FROM read_parquet('{glob_pattern}')
+            WHERE trace_id = ?
+            ORDER BY processing_time ASC
+            """,
+            [trace_id],
+        ).fetchall()
+    except duckdb.IOException:
+        return []
+    finally:
+        con.close()
+
+    return [
+        {
+            "pipeline_id": r[0],
+            "operator_id": r[1],
+            "operator_type": r[2],
+            "feature_name": r[3],
+            "capture_mode": r[4],
+            "processing_time": r[5],
+            "trace_id": r[6],
+            "span_id": r[7],
+            "parent_span_id": r[8],
+            "input_cardinality": r[9],
+            "output_cardinality": r[10],
+        }
+        for r in rows
+    ]
+
+
+def query_entity_feature_points(entity_id: str) -> list[dict[str, Any]]:
+    glob_pattern = _all_pipelines_glob()
+
+    con = duckdb.connect()
+    _configure_s3(con)
+    try:
+        rows = con.execute(
+            f"""
+            SELECT DISTINCT ON (pipeline_id, feature_name)
+                pipeline_id, feature_name, feature_value, feature_value_type, processing_time
+            FROM read_parquet('{glob_pattern}')
+            WHERE entity_id = ?
+              AND capture_mode = 'ENTITY'
+              AND feature_name IS NOT NULL
+            ORDER BY pipeline_id, feature_name, processing_time DESC
+            """,
+            [entity_id],
+        ).fetchall()
+    except (duckdb.IOException, duckdb.BinderException):
+        return []
+    finally:
+        con.close()
+
+    return [
+        {
+            "pipeline_id": r[0],
+            "feature_name": r[1],
+            "feature_value_decoded": _decode_feature_value(r[2], r[3]),
+            "processing_time": r[4],
+        }
+        for r in rows
+    ]

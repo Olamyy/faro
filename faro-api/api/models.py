@@ -121,6 +121,37 @@ class EntityValuesResponse(BaseModel):
     values: list[EntityValuePoint]
 
 
+class TraceEvent(BaseModel):
+    pipeline_id: str
+    operator_id: str
+    operator_type: str
+    feature_name: str | None
+    capture_mode: str
+    processing_time: str
+    trace_id: str
+    span_id: str
+    parent_span_id: str | None
+    input_cardinality: int
+    output_cardinality: int
+
+
+class TraceResponse(BaseModel):
+    trace_id: str
+    events: list[TraceEvent]
+
+
+class EntityFeaturePoint(BaseModel):
+    pipeline_id: str
+    feature_name: str
+    feature_value_decoded: float | int | str | None
+    processing_time: str
+
+
+class EntityFeaturesResponse(BaseModel):
+    entity_id: str
+    features: list[EntityFeaturePoint]
+
+
 class PipelinesResponse(BaseModel):
     pipelines: list[str]
 
