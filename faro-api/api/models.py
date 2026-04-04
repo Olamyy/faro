@@ -103,6 +103,7 @@ class Violation(BaseModel):
 
 class ViolationsResponse(BaseModel):
     violations: list[Violation]
+    total: int = 0
 
 
 class EntityValuePoint(BaseModel):

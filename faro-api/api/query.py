@@ -265,7 +265,9 @@ def query_violations(
     since: str | None,
     severity_gte: str | None,
     violation_type: str | None = None,
-) -> list[dict[str, Any]]:
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
     if pipeline_id:
         glob_pattern = _violation_glob(pipeline_id)
     else:
@@ -292,17 +294,24 @@ def query_violations(
     con = duckdb.connect()
     _configure_s3(con)
     try:
+        total_row = con.execute(
+            f"SELECT count(*) FROM read_parquet('{glob_pattern}') WHERE {where_clause}",
+            params,
+        ).fetchone()
+        total = int(total_row[0]) if total_row else 0
+
         rows = con.execute(
             f"""
             SELECT pipeline_id, feature_name, violation_type, detected_at, severity, detail
             FROM read_parquet('{glob_pattern}')
             WHERE {where_clause}
             ORDER BY detected_at DESC
+            LIMIT {limit} OFFSET {offset}
             """,
             params,
         ).fetchall()
     except duckdb.IOException:
-        return []
+        return [], 0
     finally:
         con.close()
 
@@ -316,7 +325,7 @@ def query_violations(
             "detail": r[5],
         }
         for r in rows
-    ]
+    ], total
 
 
 def _decode_feature_value(raw: bytes | None, value_type: str | None) -> float | int | str | None:
