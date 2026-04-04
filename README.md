@@ -1,16 +1,22 @@
-# Faro
+# 🔭 Faro
 
-![Faro UI — Feature Health](docs/screenshots/feature-health.png)
-
+[![CI](https://github.com/Olamyy/faro/actions/workflows/ci.yml/badge.svg)](https://github.com/Olamyy/faro/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/java-17-orange.svg)](https://openjdk.org/projects/jdk/17/)
+[![Flink](https://img.shields.io/badge/flink-1.18.x-e6522c.svg)](https://flink.apache.org/)
+[![Spark](https://img.shields.io/badge/spark-3.5.x-e25a1c.svg)](https://spark.apache.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
 Faro is an observability layer for streaming feature pipelines. It captures operator
 cardinality, watermark lag, per-entity feature values, and automatic violation detection
-without changing your pipeline logic. It's entirely passive and non-intrusive. 
+without changing your pipeline logic. It's entirely passive and non-intrusive.
 You can route capture events to wherever you already send observability data,
 <a href="https://grafana.com" target="_blank">Grafana</a>,
 <a href="https://newrelic.com" target="_blank">New Relic</a>,
 <a href="https://www.honeycomb.io" target="_blank">Honeycomb</a>,
-or your existing Kafka topics. If you don't have a monitoring stack, faro includes a built-in UI and query API backed by DuckDB over Parquet for ad-hoc exploration and alerting.
+or your existing Kafka topics. If you don't have a monitoring stack, faro includes a
+[built-in query API and UI](#query-api-and-ui) backed by DuckDB over Parquet for ad-hoc
+exploration and alerting.
 
 ## What problem does it solve?
 
@@ -55,86 +61,6 @@ dependencies {
     implementation 'dev.faro:faro-spark:0.1.0-SNAPSHOT'
 }
 ```
-
-### Query API (optional, Python)
-
-If you don't have an existing monitoring stack:
-
-```bash
-docker run -p 9000:9000 \
-  -e FARO_LOCAL_PATH=/var/faro/parquet \
-  -v faro-data:/var/faro/parquet \
-  faro-api
-```
-
-## Comparison
-
-Every tool in this space can surface *some* feature health signal, but they all require you
-to emit custom metrics, write alerting rules, or run additional infrastructure. Faro captures
-pipeline internals passively at the operator level and requires no changes to your pipeline
-logic or data schema.
-
-**Observability tools**
-
-| | Faro | Datadog | Grafana | New Relic | Honeycomb |
-|---|---|---|---|---|---|
-| Pipeline-level cardinality & watermark | ✓ | needs custom metrics | needs custom metrics | needs custom metrics | needs custom spans |
-| Per-entity feature value at processing time | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Freshness, drift, null-rate, cardinality violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
-| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ |
-| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
-
-**Feature stores**
-
-| | Faro | Hopsworks | SageMaker Feature Store | Tecton | Feast | Databricks Feature Store |
-|---|---|---|---|---|---|---|
-| Pipeline-level cardinality & watermark | ✓ | ✗ | ✗ | partial | ✗ | ✗ |
-| Per-entity feature value at processing time | ✓ | serving store only | serving store only | serving store only | serving store only | serving store only |
-| Freshness, drift, null-rate, cardinality violations | ✓ | partial | partial | ✓ | ✗ | partial |
-| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
-
-## How it works
-
-Every instrumented operator emits two kinds of events.
-
-**AGGREGATE events** fire on each flush (window close, periodic timer). They capture input
-and output cardinality, watermark, event-time range, late event count, and whether any
-observability events were dropped since last flush.
-
-**ENTITY events** fire per record when you configure a feature with an entity key and value
-extractor. They capture the entity ID, the raw feature value at processing time, and event
-time. Features classified as `PERSONAL` or `SENSITIVE` are automatically suppressed and
-degrade to AGGREGATE mode so no entity data is ever emitted.
-
-A *pipeline* is a named unit containing one or more instrumented *operators*. Events flow
-from operators into a *sink*, which routes them to your destination of choice.
-
-## Components
-
-| Module      | Description |
-|-------------|-------------|
-| faro-core   | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies. |
-| faro-flink  | Flink 1.18.x adapter that wraps operators and sink implementations. |
-| faro-spark  | Spark 3.5.x / Scala 2.13 adapter. Also published as a Databricks-compatible fat JAR. |
-| faro-api    | FastAPI service with ten REST endpoints covering ingest, pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. Backed by DuckDB over Parquet. |
-| faro-e2e    | Runnable demo jobs for Flink and Spark covering every sink variant and both AGGREGATE and ENTITY modes. |
-
-**Sink options**
-
-| Sink | Adapter | When to use |
-|------|---------|-------------|
-| `StdoutCaptureEventSink` | FLINK, DATABRICKS | Local development and testing |
-| `KafkaCaptureEventSink` | FLINK, DATABRICKS | You already have Kafka or Redpanda |
-| `HttpCaptureEventSink` | FLINK, DATABRICKS | You want faro-api, or any webhook receiver |
-| `OtelCaptureEventSink` | FLINK, DATABRICKS | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
-| `DeltaCaptureEventSink` | DATABRICKS | You're on Spark or Databricks and want events in a Delta table |
-| `AsyncCaptureEventSink` | FLINK, DATABRICKS | Wraps any event-driven sink above. Decouples capture from operator threads |
-
-All sinks are fire-and-forget. Failures are logged and never propagate to your pipeline.
-`AsyncCaptureEventSink` additionally tracks overflow. When the in-memory ring buffer fills
-up, it sets a `capture_drop_since_last` flag on the next flush event so you can see it in
-the query layer.
 
 ## Examples
 
@@ -228,6 +154,103 @@ input.writeStream()
     })
     .start();
 ```
+
+## Query API and UI
+
+If you don't have an existing monitoring stack, `faro-api` gives you a REST
+query layer and a dashboard for exploration. For the query API, vents are stored as Parquet files and queried via DuckDB.
+
+```bash
+docker run -p 9000:9000 \
+  -e FARO_LOCAL_PATH=/var/faro/parquet \
+  -v faro-data:/var/faro/parquet \
+  faro-api
+```
+
+The UI starts alongside the API and is available at `http://localhost:9000/ui`.
+
+![Faro UI — Feature Health](docs/images/dashboard.png)
+
+Six views are available:
+
+- Feature Health (cardinality trend, filter ratio, watermark lag,
+violation signals)
+- Entity Values,
+- Value Summary (distribution statistics)
+- Violations (filterable feed with severity)
+- Operators (per-operator throughput and health), and
+- Entity Lookup (cross-pipeline feature lineage for a single entity).
+
+
+## How it works
+
+Every instrumented operator emits two kinds of events.
+
+**AGGREGATE events** fire on each flush (window close, periodic timer). They capture input
+and output cardinality, watermark, event-time range, late event count, and whether any
+observability events were dropped since last flush.
+
+**ENTITY events** fire per record when you configure a feature with an entity key and value
+extractor. They capture the entity ID, the raw feature value at processing time, and event
+time. Features classified as `PERSONAL` or `SENSITIVE` are automatically suppressed and
+degrade to AGGREGATE mode so no entity data is ever emitted.
+
+A *pipeline* is a named unit containing one or more instrumented *operators*. Events flow
+from operators into a *sink*, which routes them to your destination of choice.
+
+## Faro vs alternatives
+
+Every tool in this space can surface *some* feature health signal, but they all require you
+to emit custom metrics, write alerting rules, or run additional infrastructure. Faro captures
+pipeline internals passively at the operator level and requires no changes to your pipeline
+logic or data schema.
+
+**Observability tools**
+
+| | Faro | Datadog | Grafana | New Relic | Honeycomb |
+|---|---|---|---|---|---|
+| Pipeline-level cardinality & watermark | ✓ | needs custom metrics | needs custom metrics | needs custom metrics | needs custom spans |
+| Per-entity feature value at processing time | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Freshness, drift, null-rate, cardinality violations | ✓ | needs alerting rules | needs alerting rules | needs alerting rules | needs alerting rules |
+| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ |
+| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ |
+
+**Feature stores**
+
+| | Faro | Hopsworks | SageMaker Feature Store | Tecton | Feast | Databricks Feature Store |
+|---|---|---|---|---|---|---|
+| Pipeline-level cardinality & watermark | ✓ | ✗ | ✗ | partial | ✗ | ✗ |
+| Per-entity feature value at processing time | ✓ | serving store only | serving store only | serving store only | serving store only | serving store only |
+| Freshness, drift, null-rate, cardinality violations | ✓ | partial | partial | ✓ | ✗ | partial |
+| No changes to pipeline logic or data schema | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| No new observability service required | ✓ (stdout/Kafka/OTLP) | ✗ | ✗ | ✗ | ✗ | ✗ |
+
+
+## Components
+
+| Module     | Description |
+|------------|-------------|
+| faro-core  | `CaptureEvent` model with JSON and Avro serialization. Engine-agnostic with no adapter dependencies. |
+| faro-flink | Flink 1.18.x adapter that wraps operators and sink implementations. |
+| faro-spark | Spark 3.5.x / Scala 2.13 adapter. Also published as a Databricks-compatible fat JAR. |
+| faro-api   | FastAPI service with ten REST endpoints covering ingest, pipeline health, feature health, entity values, violations, trace lookup, and entity cross-pipeline lineage. Backed by DuckDB over Parquet. |
+| faro-e2e   | Runnable demo jobs for Flink and Spark covering every sink variant and both AGGREGATE and ENTITY modes. |
+
+**Sink options**
+
+| Sink | Adapter | When to use |
+|------|---------|-------------|
+| `StdoutCaptureEventSink` | FLINK, DATABRICKS | Local development and testing |
+| `KafkaCaptureEventSink` | FLINK, DATABRICKS | You already have Kafka or Redpanda |
+| `HttpCaptureEventSink` | FLINK, DATABRICKS | You want faro-api, or any webhook receiver |
+| `OtelCaptureEventSink` | FLINK, DATABRICKS | You already have Grafana, New Relic, Honeycomb, or any OTLP-compatible backend |
+| `DeltaCaptureEventSink` | DATABRICKS | You're on Spark or Databricks and want events in a Delta table |
+| `AsyncCaptureEventSink` | FLINK, DATABRICKS | Wraps any event-driven sink above. Decouples capture from operator threads |
+
+All sinks are fire-and-forget. Failures are logged and never propagate to your pipeline.
+`AsyncCaptureEventSink` additionally tracks overflow. When the in-memory ring buffer fills
+up, it sets a `capture_drop_since_last` flag on the next flush event so you can see it in
+the query layer.
 
 ## Roadmap
 
