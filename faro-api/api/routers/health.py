@@ -1,18 +1,19 @@
+import re
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ..models import FeatureHealthResponse, PipelineHealthResponse, OperatorSummary, CardinalityPoint
 from ..query import (
-    check_cardinality_anomaly,
     check_freshness_violation,
-    check_mean_drift,
-    check_null_rate,
     query_feature_health,
     query_pipeline_health,
+    query_violation_signals,
 )
 from ..store import ParquetStore
+
+_WINDOW_RE = re.compile(r"^\d+[hmd]$")
 
 router = APIRouter()
 
@@ -26,10 +27,15 @@ def get_feature_health(
     operator_id: Annotated[str | None, Query(description="Scope to a single operator")] = None,
     end_time: Annotated[str | None, Query(description="ISO-8601 upper bound for processing_time")] = None,
 ):
+    if compare_to is not None:
+        base = compare_to.removesuffix("_ago")
+        if not _WINDOW_RE.match(base):
+            raise HTTPException(status_code=422, detail=f"Invalid compare_to value: '{compare_to}'")
     result = query_feature_health(pipeline_id, feature_name, window, compare_to, operator_id, end_time)
 
     freshness = check_freshness_violation(pipeline_id, feature_name, result["emit_interval_ms"])
     result["freshness_violation"] = freshness
+    signals = query_violation_signals(pipeline_id, feature_name, window)
 
     now_iso = datetime.now(tz=timezone.utc).isoformat()
 
@@ -43,7 +49,7 @@ def get_feature_health(
             detail=f"No event received for feature '{feature_name}' in expected window",
         )
 
-    if check_mean_drift(pipeline_id, feature_name, window):
+    if signals["mean_drift"]:
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
@@ -53,7 +59,7 @@ def get_feature_health(
             detail=f"Feature '{feature_name}' mean drifted beyond threshold",
         )
 
-    if check_null_rate(pipeline_id, feature_name, window):
+    if signals["null_rate"]:
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
@@ -63,7 +69,7 @@ def get_feature_health(
             detail=f"Feature '{feature_name}' null rate exceeds threshold",
         )
 
-    if check_cardinality_anomaly(pipeline_id, feature_name, window):
+    if signals["cardinality_anomaly"]:
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,

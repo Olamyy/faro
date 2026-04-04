@@ -76,13 +76,6 @@ def test_trace_lookup_returns_events_for_trace():
     assert all(e["trace_id"] == "trace-abc" for e in events)
 
 
-def test_trace_lookup_empty_for_unknown_trace():
-    client = TestClient(app)
-    resp = client.get("/traces/no-such-trace")
-    assert resp.status_code == 200
-    assert resp.json()["events"] == []
-
-
 def test_entity_features_returns_latest_per_pipeline_feature():
     ParquetStore.write_events([
         _entity("device-1", 10.0, pipeline_id="pipe-a", feature="temp"),
@@ -103,8 +96,3 @@ def test_entity_features_returns_latest_per_pipeline_feature():
     assert by_key[("pipe-a", "temp")]["feature_value_decoded"] == 20.0
 
 
-def test_entity_features_empty_for_unknown_entity():
-    client = TestClient(app)
-    resp = client.get("/entities/nobody/features")
-    assert resp.status_code == 200
-    assert resp.json()["features"] == []

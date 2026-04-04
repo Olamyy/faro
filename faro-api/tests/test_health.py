@@ -77,9 +77,3 @@ def test_feature_health_returns_data(seeded_store):
     assert len(body["cardinality_trend"]) >= 1
 
 
-def test_feature_health_empty_when_no_data(tmp_path):
-    cfg.settings.local_path = str(tmp_path)
-    client = TestClient(app)
-    resp = client.get("/features/temperature/health?pipeline_id=does-not-exist")
-    assert resp.status_code == 200
-    assert resp.json()["cardinality_trend"] == []

@@ -1,5 +1,5 @@
 import base64
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 
 
@@ -9,7 +9,7 @@ class CaptureEvent(BaseModel):
     operator_id: str
     operator_type: str
     feature_name: str | None = None
-    capture_mode: str
+    capture_mode: Literal["AGGREGATE", "ENTITY"]
     event_time: str | None = None
     event_time_min: str | None = None
     processing_time: str
@@ -126,7 +126,7 @@ class TraceEvent(BaseModel):
     operator_id: str
     operator_type: str
     feature_name: str | None
-    capture_mode: str
+    capture_mode: Literal["AGGREGATE", "ENTITY"]
     processing_time: str
     trace_id: str
     span_id: str

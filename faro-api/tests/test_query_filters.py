@@ -66,8 +66,6 @@ def _seed_violations(tmp_path, rows: list[dict]):
     return pipeline_id
 
 
-# --- emit_interval_ms on feature health ---
-
 def test_feature_health_exposes_emit_interval_ms():
     ParquetStore.write_events([_agg()])
     client = TestClient(app)
@@ -75,8 +73,6 @@ def test_feature_health_exposes_emit_interval_ms():
     assert resp.status_code == 200
     assert resp.json()["emit_interval_ms"] == 5000
 
-
-# --- end_time upper bound ---
 
 def test_feature_health_end_time_excludes_newer_events():
     past_time = (datetime.now(tz=timezone.utc) - timedelta(hours=2)).isoformat()
@@ -98,8 +94,6 @@ def test_feature_health_end_time_excludes_newer_events():
     assert trend[0]["input_cardinality"] == 50
 
 
-# --- violations: severity_gte in SQL ---
-
 def test_violations_severity_gte_filters_in_sql(tmp_path):
     pipeline_id = _seed_violations(tmp_path, [
         {"pipeline_id": "pipe-viol", "feature_name": "f", "violation_type": "FRESHNESS",
@@ -116,8 +110,6 @@ def test_violations_severity_gte_filters_in_sql(tmp_path):
     assert len(violations) == 2
     assert all(v["severity"] in ("HIGH", "CRITICAL") for v in violations)
 
-
-# --- violations: violation_type filter ---
 
 def test_violations_filter_by_violation_type(tmp_path):
     pipeline_id = _seed_violations(tmp_path, [

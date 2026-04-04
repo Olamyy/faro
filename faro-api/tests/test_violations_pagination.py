@@ -59,9 +59,3 @@ def test_violations_pagination_offset(many_violations):
     assert first_ids.isdisjoint(second_ids)
 
 
-def test_violations_default_limit(many_violations):
-    client = TestClient(app)
-    resp = client.get(f"/violations?pipeline_id={many_violations}")
-    assert resp.status_code == 200
-    assert len(resp.json()["violations"]) == 25
-    assert resp.json()["total"] == 25

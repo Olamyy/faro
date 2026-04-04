@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 import api.config as cfg
 from api.main import app
+from api.models import CaptureEvent
+from api.store import ParquetStore
 
 
 _SCHEMA = pa.schema([
@@ -168,5 +170,90 @@ def test_no_false_positive_drift_when_stable(tmp_path):
     client.get("/features/temp/health?pipeline_id=pipe-1&window=1h")
 
     resp = client.get("/violations?pipeline_id=pipe-1&violation_type=MEAN_DRIFT")
+    assert resp.status_code == 200
+    assert resp.json()["violations"] == []
+
+
+def test_no_false_positive_null_rate_when_rate_is_low(tmp_path):
+    rows = [
+        {"processing_time": _ts(timedelta(minutes=-i)), "feature_value": _pack(float(i)), "feature_value_type": "SCALAR_DOUBLE"}
+        for i in range(1, 11)
+    ]
+    _write_entity_rows(tmp_path, "pipe-1", rows)
+
+    client = TestClient(app)
+    client.get("/features/temp/health?pipeline_id=pipe-1&window=1h")
+
+    resp = client.get("/violations?pipeline_id=pipe-1&violation_type=NULL_RATE")
+    assert resp.status_code == 200
+    assert resp.json()["violations"] == []
+
+
+def test_no_false_positive_cardinality_anomaly_when_ratio_stable(tmp_path):
+    rows = [
+        {"processing_time": _ts(timedelta(minutes=-90)), "input_c": 100, "output_c": 80},
+        {"processing_time": _ts(timedelta(minutes=-10)), "input_c": 100, "output_c": 80},
+    ]
+    _write_agg_rows(tmp_path, "pipe-1", rows)
+
+    client = TestClient(app)
+    client.get("/features/temp/health?pipeline_id=pipe-1&window=1h")
+
+    resp = client.get("/violations?pipeline_id=pipe-1&violation_type=CARDINALITY_ANOMALY")
+    assert resp.status_code == 200
+    assert resp.json()["violations"] == []
+
+
+def test_freshness_violation_written_when_aggregate_events_stale(tmp_path):
+    stale_rows = [
+        {"processing_time": _ts(timedelta(hours=-2)), "input_c": 100, "output_c": 80},
+    ]
+    _write_agg_rows(tmp_path, "pipe-1", stale_rows)
+
+    agg_event = CaptureEvent(
+        pipeline_id="pipe-1",
+        operator_id="op-1",
+        operator_type="FILTER",
+        capture_mode="AGGREGATE",
+        processing_time=_ts(timedelta(hours=-2)),
+        trace_id="t",
+        span_id="s",
+        input_cardinality=100,
+        output_cardinality=80,
+        emit_interval_ms=5000,
+        capture_drop_since_last=False,
+        feature_name="temp",
+    )
+    ParquetStore.write_events([agg_event])
+
+    client = TestClient(app)
+    client.get("/features/temp/health?pipeline_id=pipe-1&window=3h")
+
+    resp = client.get("/violations?pipeline_id=pipe-1&violation_type=FRESHNESS")
+    assert resp.status_code == 200
+    assert len(resp.json()["violations"]) >= 1
+
+
+def test_freshness_no_violation_when_aggregate_events_recent(tmp_path):
+    agg_event = CaptureEvent(
+        pipeline_id="pipe-1",
+        operator_id="op-1",
+        operator_type="FILTER",
+        capture_mode="AGGREGATE",
+        processing_time=_ts(timedelta(minutes=-1)),
+        trace_id="t",
+        span_id="s",
+        input_cardinality=100,
+        output_cardinality=80,
+        emit_interval_ms=30000,
+        capture_drop_since_last=False,
+        feature_name="temp",
+    )
+    ParquetStore.write_events([agg_event])
+
+    client = TestClient(app)
+    client.get("/features/temp/health?pipeline_id=pipe-1&window=1h")
+
+    resp = client.get("/violations?pipeline_id=pipe-1&violation_type=FRESHNESS")
     assert resp.status_code == 200
     assert resp.json()["violations"] == []

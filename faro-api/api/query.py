@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 import struct
 from datetime import datetime, timedelta, timezone
@@ -11,6 +12,7 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 _WINDOW_RE = re.compile(r"^(\d+)([hmd])$")
+_S3_VALUE_RE = re.compile(r"^[A-Za-z0-9/_:.\-]+$")
 
 
 def _parse_window(window: str) -> timedelta:
@@ -43,16 +45,22 @@ def _all_violations_glob() -> str:
     return f"{settings.local_path}/violations/pipeline_id=*/part-*.parquet"
 
 
+def _safe_s3_value(value: str, name: str) -> str:
+    if not _S3_VALUE_RE.match(value):
+        raise ValueError(f"S3 config '{name}' contains invalid characters")
+    return value
+
+
 def _configure_s3(con: duckdb.DuckDBPyConnection) -> None:
     if settings.storage_backend != "s3":
         return
-    con.execute(f"SET s3_region='{settings.s3_region}'")
+    con.execute(f"SET s3_region='{_safe_s3_value(settings.s3_region, 's3_region')}'")
     if settings.s3_access_key_id:
-        con.execute(f"SET s3_access_key_id='{settings.s3_access_key_id}'")
+        con.execute(f"SET s3_access_key_id='{_safe_s3_value(settings.s3_access_key_id, 's3_access_key_id')}'")
     if settings.s3_secret_access_key:
-        con.execute(f"SET s3_secret_access_key='{settings.s3_secret_access_key}'")
+        con.execute(f"SET s3_secret_access_key='{_safe_s3_value(settings.s3_secret_access_key, 's3_secret_access_key')}'")
     if settings.s3_endpoint_url:
-        con.execute(f"SET s3_endpoint='{settings.s3_endpoint_url}'")
+        con.execute(f"SET s3_endpoint='{_safe_s3_value(settings.s3_endpoint_url, 's3_endpoint_url')}'")
 
 
 def query_feature_health(
@@ -268,6 +276,9 @@ def query_violations(
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, int(offset))
+
     if pipeline_id:
         glob_pattern = _violation_glob(pipeline_id)
     else:
@@ -294,15 +305,10 @@ def query_violations(
     con = duckdb.connect()
     _configure_s3(con)
     try:
-        total_row = con.execute(
-            f"SELECT count(*) FROM read_parquet('{glob_pattern}') WHERE {where_clause}",
-            params,
-        ).fetchone()
-        total = int(total_row[0]) if total_row else 0
-
         rows = con.execute(
             f"""
-            SELECT pipeline_id, feature_name, violation_type, detected_at, severity, detail
+            SELECT pipeline_id, feature_name, violation_type, detected_at, severity, detail,
+                   count(*) OVER () AS total_count
             FROM read_parquet('{glob_pattern}')
             WHERE {where_clause}
             ORDER BY detected_at DESC
@@ -315,6 +321,7 @@ def query_violations(
     finally:
         con.close()
 
+    total = int(rows[0][6]) if rows else 0
     return [
         {
             "pipeline_id": r[0],
@@ -352,6 +359,7 @@ def query_entity_values(
     capture_mode: str | None = "ENTITY",
     operator_id: str | None = None,
 ) -> list[dict[str, Any]]:
+    limit = max(1, int(limit))
     glob_pattern = _glob_for_pipeline(pipeline_id)
     delta = _parse_window(window)
     cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
@@ -440,7 +448,7 @@ def query_entity_value_summary(
     for raw, vtype in rows:
         entity_count += 1
         decoded = _decode_feature_value(raw, vtype)
-        if decoded is None or not isinstance(decoded, (int, float)):
+        if decoded is None or not isinstance(decoded, (int, float)) or not math.isfinite(float(decoded)):
             null_count += 1
         else:
             numeric.append(float(decoded))
@@ -510,6 +518,7 @@ def check_freshness_violation(
             f"""
             SELECT count(*) FROM read_parquet('{glob_pattern}')
             WHERE feature_name = ?
+              AND capture_mode = 'AGGREGATE'
               AND processing_time >= ?
             """,
             [feature_name, cutoff],
@@ -522,46 +531,11 @@ def check_freshness_violation(
     return row is None or row[0] == 0
 
 
-def _compute_mean_for_window(
-    glob_pattern: str,
-    feature_name: str,
-    start: str,
-    end: str | None,
-) -> float | None:
-    con = duckdb.connect()
-    _configure_s3(con)
-    conditions = ["feature_name = ?", "capture_mode = 'ENTITY'", "feature_value IS NOT NULL", "processing_time >= ?"]
-    params: list[Any] = [feature_name, start]
-    if end:
-        conditions.append("processing_time < ?")
-        params.append(end)
-    where_clause = " AND ".join(conditions)
-    try:
-        rows = con.execute(
-            f"""
-            SELECT feature_value, feature_value_type
-            FROM read_parquet('{glob_pattern}')
-            WHERE {where_clause}
-            """,
-            params,
-        ).fetchall()
-    except (duckdb.IOException, duckdb.BinderException):
-        return None
-    finally:
-        con.close()
-
-    numeric = [_decode_feature_value(r[0], r[1]) for r in rows]
-    numeric = [v for v in numeric if isinstance(v, (int, float))]
-    if not numeric:
-        return None
-    return sum(numeric) / len(numeric)
-
-
-def check_mean_drift(
+def query_violation_signals(
     pipeline_id: str,
     feature_name: str,
     window: str,
-) -> bool:
+) -> dict[str, bool]:
     glob_pattern = _glob_for_pipeline(pipeline_id)
     delta = _parse_window(window)
     now = datetime.now(tz=timezone.utc)
@@ -569,66 +543,21 @@ def check_mean_drift(
     prev_start = (now - 2 * delta).isoformat()
     prev_end = current_start
 
-    current_mean = _compute_mean_for_window(glob_pattern, feature_name, current_start, None)
-    prev_mean = _compute_mean_for_window(glob_pattern, feature_name, prev_start, prev_end)
-
-    if current_mean is None or prev_mean is None or prev_mean == 0:
-        return False
-
-    return abs(current_mean - prev_mean) / abs(prev_mean) > settings.drift_threshold
-
-
-def check_null_rate(
-    pipeline_id: str,
-    feature_name: str,
-    window: str,
-) -> bool:
-    glob_pattern = _glob_for_pipeline(pipeline_id)
-    delta = _parse_window(window)
-    cutoff = (datetime.now(tz=timezone.utc) - delta).isoformat()
-
     con = duckdb.connect()
     _configure_s3(con)
     try:
-        row = con.execute(
+        raw_entity = con.execute(
             f"""
-            SELECT
-                count(*) FILTER (WHERE feature_value IS NULL),
-                count(*)
+            SELECT feature_value, feature_value_type, processing_time
             FROM read_parquet('{glob_pattern}')
             WHERE feature_name = ?
               AND capture_mode = 'ENTITY'
               AND processing_time >= ?
             """,
-            [feature_name, cutoff],
-        ).fetchone()
-    except (duckdb.IOException, duckdb.BinderException):
-        return False
-    finally:
-        con.close()
+            [feature_name, prev_start],
+        ).fetchall()
 
-    if row is None or row[1] == 0:
-        return False
-
-    return (row[0] / row[1]) > settings.null_rate_threshold
-
-
-def check_cardinality_anomaly(
-    pipeline_id: str,
-    feature_name: str,
-    window: str,
-) -> bool:
-    glob_pattern = _glob_for_pipeline(pipeline_id)
-    delta = _parse_window(window)
-    now = datetime.now(tz=timezone.utc)
-    current_start = (now - delta).isoformat()
-    prev_start = (now - 2 * delta).isoformat()
-    prev_end = current_start
-
-    con = duckdb.connect()
-    _configure_s3(con)
-    try:
-        row = con.execute(
+        agg_row = con.execute(
             f"""
             SELECT
                 avg(CASE WHEN processing_time >= ? THEN output_cardinality * 1.0 / NULLIF(input_cardinality, 0) END),
@@ -641,21 +570,63 @@ def check_cardinality_anomaly(
             [current_start, prev_start, prev_end, feature_name, prev_start],
         ).fetchone()
     except (duckdb.IOException, duckdb.BinderException):
-        return False
+        return {"mean_drift": False, "null_rate": False, "cardinality_anomaly": False}
     finally:
         con.close()
 
-    if row is None or row[0] is None or row[1] is None or row[1] == 0:
-        return False
+    current_vals: list[float] = []
+    prev_vals: list[float] = []
+    null_curr = 0
+    total_curr = 0
 
-    return (row[1] - row[0]) / row[1] > settings.cardinality_drop_threshold
+    for raw, vtype, pts in raw_entity:
+        in_current = pts >= current_start
+        if in_current:
+            total_curr += 1
+            if raw is None:
+                null_curr += 1
+                continue
+        decoded = _decode_feature_value(raw, vtype)
+        if decoded is None or not isinstance(decoded, (int, float)) or not math.isfinite(float(decoded)):
+            if in_current:
+                null_curr += 1
+            continue
+        v = float(decoded)
+        if in_current:
+            current_vals.append(v)
+        else:
+            prev_vals.append(v)
+
+    mean_drift = False
+    if current_vals and prev_vals:
+        curr_mean = sum(current_vals) / len(current_vals)
+        prev_mean = sum(prev_vals) / len(prev_vals)
+        if prev_mean != 0:
+            mean_drift = abs(curr_mean - prev_mean) / abs(prev_mean) > settings.drift_threshold
+
+    null_rate = (null_curr / total_curr > settings.null_rate_threshold) if total_curr > 0 else False
+
+    cardinality_anomaly = False
+    if agg_row and agg_row[0] is not None and agg_row[1] is not None and agg_row[1] != 0:
+        cardinality_anomaly = (agg_row[1] - agg_row[0]) / agg_row[1] > settings.cardinality_drop_threshold
+
+    return {"mean_drift": mean_drift, "null_rate": null_rate, "cardinality_anomaly": cardinality_anomaly}
+
+
+def check_mean_drift(pipeline_id: str, feature_name: str, window: str) -> bool:
+    return query_violation_signals(pipeline_id, feature_name, window)["mean_drift"]
+
+
+def check_null_rate(pipeline_id: str, feature_name: str, window: str) -> bool:
+    return query_violation_signals(pipeline_id, feature_name, window)["null_rate"]
+
+
+def check_cardinality_anomaly(pipeline_id: str, feature_name: str, window: str) -> bool:
+    return query_violation_signals(pipeline_id, feature_name, window)["cardinality_anomaly"]
 
 
 def query_list_pipelines() -> list[str]:
-    if settings.storage_backend == "s3":
-        glob_pattern = f"s3://{settings.s3_bucket}/{settings.s3_prefix}pipeline_id=*/date=*/part-*.parquet"
-    else:
-        glob_pattern = f"{settings.local_path}/pipeline_id=*/date=*/part-*.parquet"
+    glob_pattern = _all_pipelines_glob()
 
     con = duckdb.connect()
     _configure_s3(con)

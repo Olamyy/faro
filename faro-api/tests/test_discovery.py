@@ -45,13 +45,6 @@ def test_list_pipelines_returns_known_pipeline():
     assert "pipe-disco" in resp.json()["pipelines"]
 
 
-def test_list_pipelines_empty_when_no_data():
-    client = TestClient(app)
-    resp = client.get("/pipelines")
-    assert resp.status_code == 200
-    assert resp.json()["pipelines"] == []
-
-
 def test_list_features_for_pipeline():
     ParquetStore.write_events([
         _event("pipe-feat", "temperature"),

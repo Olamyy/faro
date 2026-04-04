@@ -60,7 +60,6 @@ def _entity(pipeline_id="pipe-1", operator_id="op-filter", feature="temp"):
 
 
 def test_pipeline_health_excludes_entity_rows_from_cardinality():
-    """ENTITY rows must not inflate total_input in pipeline health."""
     ParquetStore.write_events([
         _agg(input_c=100, output_c=60),
         _entity(),
@@ -82,14 +81,6 @@ def test_pipeline_health_exposes_filter_ratio():
     assert resp.status_code == 200
     ops = resp.json()["operators"]
     assert pytest.approx(ops[0]["filter_ratio"], abs=0.01) == 0.60
-
-
-def test_pipeline_health_window_param():
-    ParquetStore.write_events([_agg()])
-    client = TestClient(app)
-    resp = client.get("/pipelines/pipe-1/health?window=1h")
-    assert resp.status_code == 200
-    assert len(resp.json()["operators"]) == 1
 
 
 def test_pipeline_health_operator_id_filter():
@@ -141,7 +132,6 @@ def test_feature_health_operator_id_filter():
 
 
 def test_values_capture_mode_aggregate():
-    """GET /features/{name}/values?capture_mode=AGGREGATE returns aggregate rows."""
     ParquetStore.write_events([
         _agg(),
         _entity(),

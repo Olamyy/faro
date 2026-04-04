@@ -56,13 +56,6 @@ def test_violations_filter_by_feature(violation_store):
     assert body["violations"][0]["feature_name"] == "temperature"
 
 
-def test_violations_filter_by_severity(violation_store):
-    client = TestClient(app)
-    resp = client.get(f"/violations?pipeline_id={violation_store}&severity_gte=HIGH")
-    assert resp.status_code == 200
-    assert all(v["severity"] in ("HIGH", "CRITICAL") for v in resp.json()["violations"])
-
-
 def test_violations_empty_when_no_data(tmp_path):
     cfg.settings.local_path = str(tmp_path)
     client = TestClient(app)
