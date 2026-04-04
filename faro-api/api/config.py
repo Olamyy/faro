@@ -17,6 +17,15 @@ class Settings:
     s3_prefix: str = field(
         default_factory=lambda: os.environ.get("FARO_S3_PREFIX", "faro/")
     )
+    s3_region: str = field(
+        default_factory=lambda: os.environ.get("FARO_S3_REGION", "us-east-1")
+    )
+    s3_access_key_id: str | None = field(
+        default_factory=lambda: os.environ.get("FARO_S3_ACCESS_KEY_ID")
+    )
+    s3_secret_access_key: str | None = field(
+        default_factory=lambda: os.environ.get("FARO_S3_SECRET_ACCESS_KEY")
+    )
     s3_endpoint_url: str | None = field(
         default_factory=lambda: os.environ.get("FARO_S3_ENDPOINT_URL")
     )
@@ -25,6 +34,15 @@ class Settings:
     )
     flush_buffer_size: int = field(
         default_factory=lambda: int(os.environ.get("FARO_FLUSH_BUFFER_SIZE", "1000"))
+    )
+    drift_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("FARO_DRIFT_THRESHOLD", "0.20"))
+    )
+    null_rate_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("FARO_NULL_RATE_THRESHOLD", "0.10"))
+    )
+    cardinality_drop_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("FARO_CARDINALITY_DROP_THRESHOLD", "0.30"))
     )
 
 

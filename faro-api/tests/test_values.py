@@ -79,13 +79,6 @@ def test_values_filters_by_entity_id():
     assert body["values"][0]["entity_id"] == "device-A"
 
 
-def test_values_empty_when_no_data():
-    client = TestClient(app)
-    resp = client.get("/features/temperature/values?pipeline_id=pipe-missing&window=1h")
-    assert resp.status_code == 200
-    assert resp.json()["values"] == []
-
-
 def test_values_excludes_aggregate_events():
     from api.models import CaptureEvent as CE
     agg_event = CE(

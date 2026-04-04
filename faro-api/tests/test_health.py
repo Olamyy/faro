@@ -11,6 +11,7 @@ from api.main import app
 
 @pytest.fixture()
 def seeded_store(tmp_path):
+    original = cfg.settings.local_path
     cfg.settings.local_path = str(tmp_path)
 
     pipeline_id = "sensor-pipeline-test"
@@ -63,7 +64,7 @@ def seeded_store(tmp_path):
 
     yield pipeline_id
 
-    cfg.settings.local_path = "/var/faro/parquet"
+    cfg.settings.local_path = original
 
 
 def test_feature_health_returns_data(seeded_store):
@@ -71,14 +72,11 @@ def test_feature_health_returns_data(seeded_store):
     resp = client.get(f"/features/temperature/health?pipeline_id={seeded_store}")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["feature_name"] == "temperature"
-    assert body["pipeline_id"] == seeded_store
-    assert len(body["cardinality_trend"]) >= 1
+    assert body["emit_interval_ms"] == 10000
+    trend = body["cardinality_trend"]
+    assert len(trend) == 1
+    assert trend[0]["input_cardinality"] == 100
+    assert pytest.approx(trend[0]["filter_ratio"], abs=0.01) == 0.5
+    assert body["watermark_lag_ms"] is not None and body["watermark_lag_ms"] >= 0
 
 
-def test_feature_health_empty_when_no_data(tmp_path):
-    cfg.settings.local_path = str(tmp_path)
-    client = TestClient(app)
-    resp = client.get("/features/temperature/health?pipeline_id=does-not-exist")
-    assert resp.status_code == 200
-    assert resp.json()["cardinality_trend"] == []

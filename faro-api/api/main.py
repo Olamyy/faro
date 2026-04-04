@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, Response
 
 from .ingest import buffer
 from .models import CaptureEvent
-from .routers import health, violations, values
+from .routers import discovery, health, lineage, violations, values
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,7 +28,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="faro-api", lifespan=lifespan)
 
+app.include_router(discovery.router)
 app.include_router(health.router)
+app.include_router(lineage.router)
 app.include_router(violations.router)
 app.include_router(values.router)
 

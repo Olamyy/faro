@@ -1,5 +1,5 @@
 import base64
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 
 
@@ -9,7 +9,7 @@ class CaptureEvent(BaseModel):
     operator_id: str
     operator_type: str
     feature_name: str | None = None
-    capture_mode: str
+    capture_mode: Literal["AGGREGATE", "ENTITY"]
     event_time: str | None = None
     event_time_min: str | None = None
     processing_time: str
@@ -61,6 +61,7 @@ class CardinalityPoint(BaseModel):
     processing_time: str
     input_cardinality: int
     output_cardinality: int
+    filter_ratio: float | None
     watermark: str | None
     capture_drop_since_last: bool
 
@@ -72,6 +73,7 @@ class FeatureHealthResponse(BaseModel):
     cardinality_trend: list[CardinalityPoint]
     watermark_lag_ms: int | None
     capture_drops: bool
+    emit_interval_ms: int | None = None
     freshness_violation: bool
     comparison: dict[str, Any] | None = None
 
@@ -82,6 +84,7 @@ class OperatorSummary(BaseModel):
     last_seen: str | None
     total_input: int
     any_drops: bool
+    filter_ratio: float | None
 
 
 class PipelineHealthResponse(BaseModel):
@@ -100,6 +103,7 @@ class Violation(BaseModel):
 
 class ViolationsResponse(BaseModel):
     violations: list[Violation]
+    total: int = 0
 
 
 class EntityValuePoint(BaseModel):
@@ -115,6 +119,46 @@ class EntityValuesResponse(BaseModel):
     pipeline_id: str
     window: str
     values: list[EntityValuePoint]
+
+
+class TraceEvent(BaseModel):
+    pipeline_id: str
+    operator_id: str
+    operator_type: str
+    feature_name: str | None
+    capture_mode: Literal["AGGREGATE", "ENTITY"]
+    processing_time: str
+    trace_id: str
+    span_id: str
+    parent_span_id: str | None
+    input_cardinality: int
+    output_cardinality: int
+
+
+class TraceResponse(BaseModel):
+    trace_id: str
+    events: list[TraceEvent]
+
+
+class EntityFeaturePoint(BaseModel):
+    pipeline_id: str
+    feature_name: str
+    feature_value_decoded: float | int | str | None
+    processing_time: str
+
+
+class EntityFeaturesResponse(BaseModel):
+    entity_id: str
+    features: list[EntityFeaturePoint]
+
+
+class PipelinesResponse(BaseModel):
+    pipelines: list[str]
+
+
+class FeaturesResponse(BaseModel):
+    pipeline_id: str
+    features: list[str]
 
 
 class EntityValueSummary(BaseModel):

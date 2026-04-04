@@ -15,8 +15,10 @@ def get_entity_values(
     window: Annotated[str, Query(description="Time window, e.g. 1h, 30m, 7d")] = "1h",
     entity_id: Annotated[str | None, Query(description="Filter to a specific entity")] = None,
     limit: Annotated[int, Query(description="Maximum number of results", ge=1, le=10_000)] = 10,
+    capture_mode: Annotated[str | None, Query(description="ENTITY, AGGREGATE, or ALL")] = "ENTITY",
+    operator_id: Annotated[str | None, Query(description="Scope to a single operator")] = None,
 ):
-    rows = query_entity_values(pipeline_id, feature_name, window, entity_id, limit)
+    rows = query_entity_values(pipeline_id, feature_name, window, entity_id, limit, capture_mode, operator_id)
     return EntityValuesResponse(
         feature_name=feature_name,
         pipeline_id=pipeline_id,

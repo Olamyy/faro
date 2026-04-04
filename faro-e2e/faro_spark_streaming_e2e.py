@@ -71,6 +71,49 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### HTTP sink variant
+# MAGIC
+# MAGIC Use this cell instead of the Delta cell above when testing `HttpCaptureEventSink`.
+# MAGIC Set `FARO_SINK_URL` to the ngrok HTTPS tunnel URL (e.g. `https://<id>.ngrok-free.app/events`).
+# MAGIC The local server (`faro-e2e/faro_sink_server.py`) must be running and the tunnel active.
+
+# COMMAND ----------
+
+# MAGIC %scala
+# MAGIC
+# MAGIC import dev.faro.core.HttpCaptureEventSink
+# MAGIC
+# MAGIC val FARO_SINK_URL = "https://<id>.ngrok-free.app/events"  // replace with your ngrok URL
+# MAGIC
+# MAGIC val listenerHttp = new FaroStreamingListener()
+# MAGIC spark.streams.addListener(listenerHttp)
+# MAGIC
+# MAGIC val faroHttp = new FaroSpark("sensor-http-pipeline",
+# MAGIC     HttpCaptureEventSink.factory(FARO_SINK_URL))
+# MAGIC   .withStreamingContext("eventTime", null, listenerHttp)
+# MAGIC
+# MAGIC val queryHttp = stream.writeStream
+# MAGIC   .foreachBatch { (batchDf: Dataset[Row], batchId: Long) =>
+# MAGIC     val filtered = faroHttp.trace(
+# MAGIC       "filter.high-temp",
+# MAGIC       CaptureEvent.OperatorType.FILTER,
+# MAGIC       config,
+# MAGIC       (ds: Dataset[Row]) => ds.filter(col("temperature") > 30.0)
+# MAGIC     ).apply(batchDf)
+# MAGIC
+# MAGIC     filtered.write.format("delta").mode("append").save(OUTPUT_TABLE)
+# MAGIC   }
+# MAGIC   .option("checkpointLocation", OUTPUT_TABLE + "/_checkpoint_http")
+# MAGIC   .start()
+# MAGIC
+# MAGIC queryHttp.awaitTermination(30000)
+# MAGIC queryHttp.stop()
+# MAGIC spark.streams.removeListener(listenerHttp)
+# MAGIC faroHttp.close()
+
+# COMMAND ----------
+
 # MAGIC %md ### Verify capture events landed
 
 # COMMAND ----------
