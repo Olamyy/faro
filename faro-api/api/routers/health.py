@@ -39,7 +39,7 @@ def get_feature_health(
 
     now_iso = datetime.now(tz=timezone.utc).isoformat()
 
-    if freshness:
+    if freshness and not ParquetStore.has_recent_violation(pipeline_id, "FRESHNESS", feature_name):
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
@@ -49,7 +49,7 @@ def get_feature_health(
             detail=f"No event received for feature '{feature_name}' in expected window",
         )
 
-    if signals["mean_drift"]:
+    if signals["mean_drift"] and not ParquetStore.has_recent_violation(pipeline_id, "MEAN_DRIFT", feature_name):
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
@@ -59,7 +59,7 @@ def get_feature_health(
             detail=f"Feature '{feature_name}' mean drifted beyond threshold",
         )
 
-    if signals["null_rate"]:
+    if signals["null_rate"] and not ParquetStore.has_recent_violation(pipeline_id, "NULL_RATE", feature_name):
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
@@ -69,7 +69,7 @@ def get_feature_health(
             detail=f"Feature '{feature_name}' null rate exceeds threshold",
         )
 
-    if signals["cardinality_anomaly"]:
+    if signals["cardinality_anomaly"] and not ParquetStore.has_recent_violation(pipeline_id, "CARDINALITY_ANOMALY", feature_name):
         ParquetStore.write_violation(
             pipeline_id=pipeline_id,
             feature_name=feature_name,
