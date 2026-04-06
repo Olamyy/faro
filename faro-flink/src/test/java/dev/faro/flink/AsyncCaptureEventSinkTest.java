@@ -67,7 +67,7 @@ class AsyncCaptureEventSinkTest {
         AsyncCaptureEventSink sink = new AsyncCaptureEventSink(inner, 3);
 
         sink.emit(sampleEvent("f1"));
-        Thread.sleep(50);
+        inner.dequeuedLatch.await();
 
         sink.emit(sampleEvent("f2"));
         sink.emit(sampleEvent("f3"));
@@ -93,7 +93,7 @@ class AsyncCaptureEventSinkTest {
         AsyncCaptureEventSink sink = new AsyncCaptureEventSink(inner, 2);
 
         sink.emit(sampleEvent("f1"));
-        Thread.sleep(50);
+        inner.dequeuedLatch.await();
 
         sink.emit(sampleEvent("f2"));
         sink.emit(sampleEvent("f3"));
@@ -112,7 +112,7 @@ class AsyncCaptureEventSinkTest {
         AsyncCaptureEventSink sink = new AsyncCaptureEventSink(inner, 2);
 
         sink.emit(sampleEvent("f1"));
-        Thread.sleep(50);
+        inner.dequeuedLatch.await();
 
         sink.emit(sampleEvent("f2"));
         sink.emit(sampleEvent("f3"));
@@ -151,9 +151,14 @@ class AsyncCaptureEventSinkTest {
     /**
      * A {@link CaptureEventSink} that blocks on {@code emit()} until a latch is released.
      * Used to pause the drain thread so the queue can be filled to capacity.
+     *
+     * <p>{@code dequeuedLatch} is counted down the first time the drain thread enters
+     * {@code emit()}, signalling that the first event has been dequeued and the queue
+     * slot is free. Tests should await this latch instead of using {@code Thread.sleep}.
      */
     private static final class LatchedSink implements CaptureEventSink {
         final List<CaptureEvent> received = new ArrayList<>();
+        final CountDownLatch dequeuedLatch = new CountDownLatch(1);
         private final CountDownLatch blocker;
         private final AtomicBoolean blocked = new AtomicBoolean(false);
 
@@ -164,6 +169,7 @@ class AsyncCaptureEventSinkTest {
         @Override
         public void emit(CaptureEvent event) {
             if (!blocked.getAndSet(true)) {
+                dequeuedLatch.countDown();
                 try {
                     blocker.await();
                 } catch (InterruptedException e) {
