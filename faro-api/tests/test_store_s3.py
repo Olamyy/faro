@@ -33,7 +33,6 @@ def test_s3_endpoint_with_port():
 
 def test_s3_endpoint_without_port():
     kwargs = _call_get_filesystem("https://s3.custom.host")
-    # Must not contain the literal string "None"
     assert "None" not in kwargs["endpoint_override"]
     assert kwargs["endpoint_override"] == "s3.custom.host"
 
