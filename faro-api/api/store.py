@@ -197,7 +197,10 @@ def _get_filesystem():
         kwargs: dict = {}
         if settings.s3_endpoint_url:
             parsed = urlparse(settings.s3_endpoint_url)
-            kwargs["endpoint_override"] = f"{parsed.hostname}:{parsed.port}"
+            if parsed.port is not None:
+                kwargs["endpoint_override"] = f"{parsed.hostname}:{parsed.port}"
+            else:
+                kwargs["endpoint_override"] = parsed.hostname
             kwargs["scheme"] = parsed.scheme
         return pafs.S3FileSystem(**kwargs)
     except Exception:
