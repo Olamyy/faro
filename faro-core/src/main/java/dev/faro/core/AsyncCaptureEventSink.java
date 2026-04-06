@@ -29,9 +29,10 @@ public final class AsyncCaptureEventSink implements CaptureEventSink {
     public void emit(CaptureEvent event) {
         if (closed) return;
         if (!queue.offer(event)) {
-            queue.poll();
             dropped.set(true);
-            queue.offer(event);
+            while (!queue.offer(event)) {
+                queue.poll();
+            }
         }
     }
 
