@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -230,6 +233,18 @@ public final class CaptureEvent {
 
     private static final Schema AVRO_SCHEMA = loadAvroSchema();
 
+    private static final Map<String, Schema> ENUM_SCHEMA_CACHE;
+    static {
+        Map<String, Schema> cache = new HashMap<>();
+        for (Schema.Field field : AVRO_SCHEMA.getFields()) {
+            Schema s = unwrapUnion(field.schema());
+            if (s.getType() == Schema.Type.ENUM) {
+                cache.put(s.getName(), s);
+            }
+        }
+        ENUM_SCHEMA_CACHE = Collections.unmodifiableMap(cache);
+    }
+
     private static Schema loadAvroSchema() {
         try (InputStream in = CaptureEvent.class.getClassLoader()
                 .getResourceAsStream("faro-event-v1.avsc")) {
@@ -346,20 +361,11 @@ public final class CaptureEvent {
     }
 
     private static GenericData.EnumSymbol toAvroEnum(String enumName, String symbol) {
-        Schema enumSchema = AVRO_SCHEMA.getField(enumName) != null
-                ? AVRO_SCHEMA.getField(enumName).schema()
-                : findEnumSchema(enumName);
-        return new GenericData.EnumSymbol(enumSchema, symbol);
-    }
-
-    private static Schema findEnumSchema(String enumName) {
-        for (Schema.Field field : AVRO_SCHEMA.getFields()) {
-            Schema s = unwrapUnion(field.schema());
-            if (s.getType() == Schema.Type.ENUM && s.getName().equals(enumName)) {
-                return s;
-            }
+        Schema enumSchema = ENUM_SCHEMA_CACHE.get(enumName);
+        if (enumSchema == null) {
+            throw new IllegalArgumentException("Avro enum schema not found: " + enumName);
         }
-        throw new IllegalArgumentException("Enum schema not found: " + enumName);
+        return new GenericData.EnumSymbol(enumSchema, symbol);
     }
 
     private static Schema unwrapUnion(Schema s) {

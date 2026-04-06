@@ -230,4 +230,4 @@ test_env/*
 GTM
 *.md
 faro-e2e/output/*
-faro-api/.idea
+faro-api/.ideadocs/.DS_Store

@@ -38,7 +38,7 @@ app.include_router(values.router)
 @app.post("/ingest", status_code=202)
 async def ingest(event: CaptureEvent, request: Request) -> Response:
     try:
-        buffer.add(event)
+        await buffer.add_async(event)
     except Exception:  # noqa: BLE001
         logger.exception("Failed to buffer ingest event")
     return Response(status_code=202)

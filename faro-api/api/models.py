@@ -38,6 +38,12 @@ class CaptureEvent(BaseModel):
     entity_id: str | None = None
     feature_value: bytes | None = None
     feature_value_type: str | None = None
+    upstream_source: str | None = None
+    upstream_system: str | None = None
+    trace_id: str
+    span_id: str
+    parent_span_id: str | None = None
+    capture_drop_since_last: bool = False
 
     @field_validator("feature_value", mode="before")
     @classmethod
@@ -49,12 +55,7 @@ class CaptureEvent(BaseModel):
         if isinstance(v, str):
             return base64.b64decode(v)
         return v
-    upstream_source: str | None = None
-    upstream_system: str | None = None
-    trace_id: str
-    span_id: str
-    parent_span_id: str | None = None
-    capture_drop_since_last: bool = False
+
 
 
 class CardinalityPoint(BaseModel):

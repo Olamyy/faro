@@ -1,9 +1,10 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+import duckdb
 import pyarrow as pa
 import pyarrow.fs as pafs
 import pyarrow.parquet as pq
@@ -141,6 +142,33 @@ class ParquetStore:
         else:
             pq.write_table(table, full_path)
 
+    @staticmethod
+    def has_recent_violation(
+        pipeline_id: str,
+        violation_type: str,
+        feature_name: str,
+        within_minutes: int = 60,
+    ) -> bool:
+        """Return True if a violation of this type was already written in the last `within_minutes`."""
+        base = ParquetStore._base_path()
+        if settings.storage_backend == "s3":
+            glob_pattern = f"s3://{settings.s3_bucket}/{settings.s3_prefix}violations/pipeline_id={pipeline_id}/part-*.parquet"
+        else:
+            glob_pattern = f"{base}/violations/pipeline_id={pipeline_id}/part-*.parquet"
+
+        cutoff = (datetime.now(tz=timezone.utc) - timedelta(minutes=within_minutes)).isoformat()
+        con = duckdb.connect()
+        try:
+            rows = con.execute(
+                f"SELECT 1 FROM read_parquet('{glob_pattern}') WHERE violation_type = ? AND feature_name = ? AND detected_at >= ? LIMIT 1",
+                [violation_type, feature_name, cutoff],
+            ).fetchone()
+        except duckdb.IOException:
+            return False
+        finally:
+            con.close()
+        return rows is not None
+
 
 def _events_to_table(events: list[CaptureEvent]) -> pa.Table:
     rows: dict[str, list] = {field.name: [] for field in _SCHEMA}
@@ -197,7 +225,10 @@ def _get_filesystem():
         kwargs: dict = {}
         if settings.s3_endpoint_url:
             parsed = urlparse(settings.s3_endpoint_url)
-            kwargs["endpoint_override"] = f"{parsed.hostname}:{parsed.port}"
+            if parsed.port is not None:
+                kwargs["endpoint_override"] = f"{parsed.hostname}:{parsed.port}"
+            else:
+                kwargs["endpoint_override"] = parsed.hostname
             kwargs["scheme"] = parsed.scheme
         return pafs.S3FileSystem(**kwargs)
     except Exception:
