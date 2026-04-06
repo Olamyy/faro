@@ -287,8 +287,8 @@ def query_violations(
     min_rank = _SEVERITY_RANK.get((severity_gte or "LOW").upper(), 0)
     eligible_severities = [k for k, v in _SEVERITY_RANK.items() if v >= min_rank]
 
-    conditions = [f"severity IN ({', '.join(repr(s) for s in eligible_severities)})"]
-    params: list[Any] = []
+    conditions = ["severity IN (SELECT unnest(?::VARCHAR[]))"]
+    params: list[Any] = [eligible_severities]
 
     if feature_name:
         conditions.append("feature_name = ?")
@@ -312,9 +312,9 @@ def query_violations(
             FROM read_parquet('{glob_pattern}')
             WHERE {where_clause}
             ORDER BY detected_at DESC
-            LIMIT {limit} OFFSET {offset}
+            LIMIT ? OFFSET ?
             """,
-            params,
+            [*params, limit, offset],
         ).fetchall()
     except duckdb.IOException:
         return [], 0
@@ -467,17 +467,17 @@ def query_entity_value_summary(
             "null_count": null_count,
         }
 
-    values_sql = ", ".join(f"({v})" for v in numeric)
     stats_con = duckdb.connect()
     try:
         stats = stats_con.execute(
-            f"""
+            """
             SELECT
                 min(v), max(v), avg(v),
                 percentile_cont(0.50) WITHIN GROUP (ORDER BY v),
                 percentile_cont(0.95) WITHIN GROUP (ORDER BY v)
-            FROM (VALUES {values_sql}) t(v)
-            """
+            FROM (SELECT unnest(?) AS v)
+            """,
+            [numeric],
         ).fetchone()
     finally:
         stats_con.close()
