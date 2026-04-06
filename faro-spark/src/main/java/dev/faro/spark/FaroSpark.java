@@ -199,6 +199,7 @@ public final class FaroSpark extends FaroBase {
             String processingTime,
             String traceId) {
         Map<String, FaroFeatureConfig<T>> features = config.getFeatures();
+        List<T> rows = input.collectAsList();
 
         for (Map.Entry<String, FaroFeatureConfig<T>> entry : features.entrySet()) {
             FaroFeatureConfig<T> fc = entry.getValue();
@@ -207,7 +208,6 @@ public final class FaroSpark extends FaroBase {
             boolean suppress = fc.getClassification() == DataClassification.PERSONAL
                     || fc.getClassification() == DataClassification.SENSITIVE;
 
-            List<T> rows = input.collectAsList();
             for (T row : rows) {
                 if (fc.getSampleRate() < 1.0
                         && ThreadLocalRandom.current().nextDouble() >= fc.getSampleRate()) {
@@ -253,6 +253,7 @@ public final class FaroSpark extends FaroBase {
             String watermark,
             String eventTime) {
         Map<String, FaroFeatureConfig<T>> features = config.getFeatures();
+        List<T> rows = input.collectAsList();
 
         for (Map.Entry<String, FaroFeatureConfig<T>> entry : features.entrySet()) {
             FaroFeatureConfig<T> fc = entry.getValue();
@@ -267,26 +268,11 @@ public final class FaroSpark extends FaroBase {
             java.util.function.Function<T, Object> featureValue = fc.getFeatureValue();
             CaptureEvent.FeatureValueType valueType = fc.getValueType();
 
-            Dataset<scala.Tuple2<String, byte[]>> extracted = input.mapPartitions(
-                    (org.apache.spark.api.java.function.MapPartitionsFunction<T, scala.Tuple2<String, byte[]>>) iter -> {
-                        List<scala.Tuple2<String, byte[]>> out = new java.util.ArrayList<>();
-                        while (iter.hasNext()) {
-                            T row = iter.next();
-                            if (sampleRate < 1.0
-                                    && ThreadLocalRandom.current().nextDouble() >= sampleRate) {
-                                continue;
-                            }
-                            String id = entityKey.apply(row);
-                            Object val = featureValue.apply(row);
-                            out.add(scala.Tuple2.apply(id, valueToBytes(val, valueType)));
-                        }
-                        return out.iterator();
-                    },
-                    org.apache.spark.sql.Encoders.tuple(
-                            org.apache.spark.sql.Encoders.STRING(),
-                            org.apache.spark.sql.Encoders.BINARY()));
-
-            for (scala.Tuple2<String, byte[]> pair : extracted.collectAsList()) {
+            for (T row : rows) {
+                if (sampleRate < 1.0
+                        && ThreadLocalRandom.current().nextDouble() >= sampleRate) {
+                    continue;
+                }
                 sink.emit(CaptureEvent.builder()
                         .pipelineId(getPipelineId())
                         .operatorId(operatorId)
@@ -301,9 +287,9 @@ public final class FaroSpark extends FaroBase {
                         .eventTime(eventTime)
                         .traceId(traceId)
                         .spanId(newSpanId())
-                        .entityId(pair._1())
+                        .entityId(entityKey.apply(row))
                         .featureValueType(valueType)
-                        .featureValue(pair._2())
+                        .featureValue(valueToBytes(featureValue.apply(row), valueType))
                         .captureDropSinceLast(false)
                         .build());
             }
