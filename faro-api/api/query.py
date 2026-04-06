@@ -160,7 +160,7 @@ def _build_comparison(
     glob_pattern: str,
 ) -> dict[str, Any]:
     delta = _parse_window(window)
-    compare_delta = _parse_window(compare_to.replace("_ago", ""))
+    compare_delta = _parse_window(compare_to.removesuffix("_ago"))
     now = datetime.now(tz=timezone.utc)
     compare_end = (now - compare_delta).isoformat()
     compare_start = (now - compare_delta - delta).isoformat()
