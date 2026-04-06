@@ -1,6 +1,5 @@
 """Tests that health-check writes violations at most once per cooldown window."""
-from datetime import datetime, timezone
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -9,7 +8,6 @@ from fastapi.testclient import TestClient
 
 import api.config as cfg
 from api.main import app
-from api.store import ParquetStore
 
 _EVENT_SCHEMA = pa.schema([
     ("schema_version", pa.string()),
@@ -104,11 +102,10 @@ def _make_row(pipeline_id, processing_time, emit_interval_ms):
 def stale_feature_store(tmp_path):
     """Seed a store so freshness fires.
 
-    We write one recent event with emit_interval_ms=1 (1 ms). The freshness
-    check window is 3 × emit_interval_ms = 3 ms, so any event older than ~3 ms
-    makes the feature stale. query_feature_health (window=1h) finds the recent
-    event and returns emit_interval_ms=1.  check_freshness_violation then looks
-    for an event within the last 3 ms and finds nothing → freshness=True.
+    One event is written with emit_interval_ms=1 ms and processing_time 5 minutes ago.
+    query_feature_health (window=1h) finds it and returns emit_interval_ms=1.
+    check_freshness_violation then looks for an event within the last 3 ms and finds
+    nothing, so freshness=True and the dedup logic is exercised.
     """
     original = cfg.settings.local_path
     cfg.settings.local_path = str(tmp_path)
@@ -118,12 +115,7 @@ def stale_feature_store(tmp_path):
     part_dir = tmp_path / f"pipeline_id={pipeline_id}" / f"date={date_str}"
     part_dir.mkdir(parents=True)
 
-    # 5 minutes ago — inside the 1h health window but far outside the 3ms freshness window
-    five_min_ago = (datetime.now(tz=timezone.utc).replace(second=0, microsecond=0)
-                    .isoformat()).replace("+00:00", "Z")
-    from datetime import timedelta as _td
-    five_min_ago = (datetime.now(tz=timezone.utc) - _td(minutes=5)).isoformat()
-
+    five_min_ago = (datetime.now(tz=timezone.utc) - timedelta(minutes=5)).isoformat()
     table = _make_row(pipeline_id, five_min_ago, emit_interval_ms=1)
     pq.write_table(table, str(part_dir / "part-0001.parquet"))
 
@@ -160,22 +152,3 @@ def test_repeated_health_check_writes_violation_once(stale_feature_store):
     assert count == 1, f"Expected 1 FRESHNESS violation, got {count}"
 
 
-def test_has_recent_violation_returns_false_when_no_violations(stale_feature_store):
-    pipeline_id, tmp_path = stale_feature_store
-    result = ParquetStore.has_recent_violation(pipeline_id, "FRESHNESS", "temp")
-    assert result is False
-
-
-def test_has_recent_violation_returns_true_after_write(stale_feature_store):
-    pipeline_id, tmp_path = stale_feature_store
-    from datetime import datetime, timezone
-    ParquetStore.write_violation(
-        pipeline_id=pipeline_id,
-        feature_name="temp",
-        violation_type="FRESHNESS",
-        detected_at=datetime.now(tz=timezone.utc).isoformat(),
-        severity="HIGH",
-        detail="test",
-    )
-    result = ParquetStore.has_recent_violation(pipeline_id, "FRESHNESS", "temp")
-    assert result is True

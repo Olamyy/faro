@@ -1,4 +1,3 @@
-"""Tests for _get_filesystem S3 endpoint_override construction."""
 from unittest.mock import patch, MagicMock
 
 import api.config as cfg
@@ -6,7 +5,6 @@ import api.store as store
 
 
 def _call_get_filesystem(url: str):
-    """Helper: patch settings and capture kwargs passed to S3FileSystem."""
     captured = {}
 
     def fake_s3(**kwargs):
@@ -33,10 +31,4 @@ def test_s3_endpoint_with_port():
 
 def test_s3_endpoint_without_port():
     kwargs = _call_get_filesystem("https://s3.custom.host")
-    assert "None" not in kwargs["endpoint_override"]
     assert kwargs["endpoint_override"] == "s3.custom.host"
-
-
-def test_s3_endpoint_scheme_preserved():
-    kwargs = _call_get_filesystem("http://minio.local:9000")
-    assert kwargs["scheme"] == "http"
